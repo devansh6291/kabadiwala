@@ -1,0 +1,26 @@
+name: kabadiwala_connect
+description: Connecting kabadiwalas to authorized recyclers
+publish_to: 'none'
+version: 0.1.0
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State management — lets different screens share data cleanly
+  flutter_riverpod: ^2.5.1
+
+  # Local offline storage — saves data on the phone even with no internet
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
