@@ -1,9 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+
 import 'app_colors.dart';
 import 'app_strings.dart';
+import 'models/lot_store.dart';
 import 'screens/create_lot_screen.dart';
+import 'screens/lot_history_screen.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Hive.initFlutter();
+  await LotStore.init();
   runApp(const MyApp());
 }
 
@@ -83,18 +90,49 @@ class HomeScreen extends StatelessWidget {
         ],
       ),
       body: Center(
-        child: ElevatedButton(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.primaryGreen,
-            foregroundColor: Colors.white,
-          ),
-          onPressed: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const CreateLotScreen()),
-            );
-          },
-          child: const Text('Create Lot'),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 220,
+              height: 56,
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primaryGreen,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                ),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const CreateLotScreen()),
+                  );
+                },
+                icon: const Icon(Icons.add_a_photo),
+                label: const Text('Create Lot'),
+              ),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: 220,
+              height: 56,
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.primaryGreen,
+                  side: const BorderSide(color: AppColors.primaryGreen, width: 1.5),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                ),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const LotHistoryScreen()),
+                  );
+                },
+                icon: const Icon(Icons.history),
+                label: const Text('My Lots'),
+              ),
+            ),
+          ],
         ),
       ),
     );

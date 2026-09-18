@@ -10,17 +10,33 @@ dependencies:
   flutter:
     sdk: flutter
 
-  # State management — lets different screens share data cleanly
   flutter_riverpod: ^2.5.1
 
-  # Local offline storage — saves data on the phone even with no internet
   hive: ^2.2.3
   hive_flutter: ^1.1.0
+
+  # Photo capture for lots
+  image_picker: ^1.1.2
+
+  # GPS tagging at lot creation
+  geolocator: ^13.0.1
+
+  # Runtime permission prompts (camera/location)
+  permission_handler: ^11.3.1
+
+  # Unique, on-device lot IDs (matches data dictionary: id is a uuid)
+  uuid: ^4.5.1
+
+  # Human-friendly relative timestamps in the lot history list
+  intl: ^0.19.0
+
+  # Local offline storage — saves data on the phone even with no internet connection
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^4.0.0
+  hive_test: ^1.0.1
 
 flutter:
   uses-material-design: true
