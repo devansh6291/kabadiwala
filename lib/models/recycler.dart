@@ -1,40 +1,29 @@
-/// Recycler / Aggregator — matches the data dictionary's Recycler entity,
-/// plus two fields needed for pooling/storage that the dictionary doesn't
-/// have yet: [minVehicleCapacityKg] (the "50 kg before a vehicle is
-/// dispatched" rule from the idea doc) and [isStorageOnly] (marks a large
-/// Kabadiwala who only custodies pooled material, never buys/processes it).
 class Recycler {
-  String recyclerId;
-  String name;
-  double facilityLat;
-  double facilityLng;
+  final String recyclerId;
+  final String name;
+  final double facilityLat;
+  final double facilityLng;
+  final List<String> materialsAccepted;
+  final String? authorizationNumber;
+  final String authorizationStatus; // "authorized" / "pending" / "unauthorized"
+  final String contactDetails;
+  final Map<String, double> offeredRates; // category → ₹/kg
+  final String pickupAvailability; // "same_day" / "scheduled" / "none"
 
-  /// Category strings matching Lot.category.
-  List<String> materialsAccepted;
+  /// Minimum lot weight (kg) this recycler requires before dispatching a
+  /// vehicle. A single lot below this threshold gets pooled with others.
+  final double minVehicleCapacityKg;
 
-  String? authorizationNumber;
+  final bool hasOwnLogistics;
 
-  /// "authorized" | "pending" | "unauthorized"
-  String authorizationStatus;
+  /// True for large-Kabadiwala storage points (idea doc section 3.3/4) —
+  /// these never appear in a buying match, only in the storage fallback.
+  final bool isStorageOnly;
 
-  String contactDetails;
+  /// ₹ per item, per week — only meaningful when [isStorageOnly] is true.
+  final double? storageRatePerItemPerWeek;
 
-  /// Category -> ₹/kg rate.
-  Map<String, double> offeredRates;
-
-  /// "same_day" | "scheduled" | "none"
-  String pickupAvailability;
-
-  /// Minimum pooled weight before a vehicle is dispatched (idea doc: e.g. 50 kg).
-  double minVehicleCapacityKg;
-
-  bool hasOwnLogistics;
-
-  /// True for a large Kabadiwala who custodies pooled e-waste for a paid
-  /// weekly rate but is not itself an authorized recycler.
-  bool isStorageOnly;
-
-  Recycler({
+  const Recycler({
     required this.recyclerId,
     required this.name,
     required this.facilityLat,
@@ -48,5 +37,6 @@ class Recycler {
     required this.minVehicleCapacityKg,
     required this.hasOwnLogistics,
     this.isStorageOnly = false,
+    this.storageRatePerItemPerWeek,
   });
 }

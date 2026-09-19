@@ -4,6 +4,7 @@ import '../app_colors.dart';
 import '../models/lot.dart';
 import '../services/recycler_matching_services.dart';
 import 'form6_signing_screen.dart';
+import 'terms_conditions_screen.dart';
 
 /// Shows where a lot ended up after routing: straight to a recycler,
 /// pooling toward one, ready for pickup, or held at a storage-only
@@ -19,14 +20,12 @@ class RoutingResultScreen extends StatefulWidget {
 
 class _RoutingResultScreenState extends State<RoutingResultScreen> {
   RoutingResult? _result;
+  bool _declinedStorage = false;
   bool _askedStorage = false;
 
   @override
   void initState() {
     super.initState();
-    // Ask once, up front, whether this collector can hold pooled
-    // material themselves — decides whether a storage Kabadiwala is
-    // needed if pooling turns out to be required.
     WidgetsBinding.instance.addPostFrameCallback((_) => _askStorageThenRoute());
   }
 
@@ -56,8 +55,29 @@ class _RoutingResultScreenState extends State<RoutingResultScreen> {
       ),
     );
 
-    final result = RecyclerMatchingService.route(widget.lot,
+    var result = RecyclerMatchingService.route(widget.lot,
         hasStorage: hasStorage ?? true);
+
+    // If routed to a storage point, require the custody Terms &
+    // Conditions to be accepted before this is treated as final.
+    if (result.outcome == RoutingOutcome.routedToStorage && mounted) {
+      final accepted = await Navigator.push<bool>(
+        context,
+        MaterialPageRoute(
+          builder: (context) =>
+              TermsConditionsScreen(storageProvider: result.storageKabadiwala!),
+        ),
+      );
+
+      if (accepted != true) {
+        // Collector declined custody terms — re-route without storage
+        // so they're at least still pooling, just without a storage
+        // assignment. Flag this in the UI via _declinedStorage.
+        _declinedStorage = true;
+        result = RecyclerMatchingService.route(widget.lot, hasStorage: true);
+      }
+    }
+
     if (!mounted) return;
     setState(() => _result = result);
   }
@@ -119,6 +139,17 @@ class _RoutingResultScreenState extends State<RoutingResultScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (_declinedStorage)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: _statusCard(
+              icon: Icons.info_outline,
+              color: AppColors.primaryYellow,
+              title: 'Storage declined',
+              subtitle:
+                  'You\'re still pooling toward this recycler, just without a storage assignment.',
+            ),
+          ),
         _statusCard(
           icon: ready ? Icons.check_circle : Icons.hourglass_bottom,
           color: ready ? AppColors.primaryGreen : AppColors.primaryYellow,
@@ -173,6 +204,8 @@ class _RoutingResultScreenState extends State<RoutingResultScreen> {
 
   Widget _storageCard(RoutingResult result) {
     final pool = result.pool!;
+    final rate = result.storageKabadiwala!.storageRatePerItemPerWeek ?? 0;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -181,10 +214,8 @@ class _RoutingResultScreenState extends State<RoutingResultScreen> {
           color: AppColors.primaryYellow,
           title: 'Routed to storage',
           subtitle:
-              'You indicated you can\'t hold this until the pool is full, so it\'s '
-              'assigned to ${result.storageKabadiwala!.name} to store at a minimal '
-              'rate until ${result.recycler!.name}\'s pool reaches '
-              '${pool.thresholdKg.toStringAsFixed(0)} kg. '
+              '${result.storageKabadiwala!.name} will hold this at ₹${rate.toStringAsFixed(0)}/item/week '
+              'until ${result.recycler!.name}\'s pool reaches ${pool.thresholdKg.toStringAsFixed(0)} kg. '
               'They only custody it — they don\'t process or resell it.',
         ),
         const SizedBox(height: 16),

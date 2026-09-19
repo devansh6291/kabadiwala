@@ -1,15 +1,11 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 
 import '../app_colors.dart';
 import '../models/lot.dart';
 import '../services/classifier_service.dart';
+import '../widgets/lot_photo_image.dart';
 import 'routing_result_screen.dart';
 
-/// Shown right after a lot is captured: what the classifier thinks the
-/// material and condition are, and the resulting value estimate, before
-/// the lot is routed to a recycler / pool / storage point.
 class ClassificationResultScreen extends StatelessWidget {
   final Lot lot;
   final ClassificationResult result;
@@ -22,8 +18,6 @@ class ClassificationResultScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final hasPhoto =
-        lot.photoPaths.isNotEmpty && File(lot.photoPaths.first).existsSync();
     final isBad = result.condition == 'bad';
 
     return Scaffold(
@@ -34,14 +28,12 @@ class ClassificationResultScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (hasPhoto)
-              ClipRRect(
+            if (lot.photoPaths.isNotEmpty)
+              LotPhotoImage(
+                path: lot.photoPaths.first,
+                width: double.infinity,
+                height: 220,
                 borderRadius: BorderRadius.circular(16),
-                child: Image.file(
-                  File(lot.photoPaths.first),
-                  height: 220,
-                  fit: BoxFit.cover,
-                ),
               ),
             const SizedBox(height: 16),
             Card(

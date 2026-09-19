@@ -1,11 +1,10 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../app_colors.dart';
 import '../models/lot.dart';
 import '../models/lot_store.dart';
+import '../widgets/lot_photo_image.dart';
 
 class LotHistoryScreen extends StatefulWidget {
   const LotHistoryScreen({super.key});
@@ -59,8 +58,6 @@ class _LotCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final hasPhoto = lot.photoPaths.isNotEmpty && File(lot.photoPaths.first).existsSync();
-
     return Card(
       elevation: 1,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -69,21 +66,11 @@ class _LotCard extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            ClipRRect(
+            LotPhotoImage(
+              path: lot.photoPaths.isNotEmpty ? lot.photoPaths.first : null,
+              width: 64,
+              height: 64,
               borderRadius: BorderRadius.circular(10),
-              child: hasPhoto
-                  ? Image.file(
-                      File(lot.photoPaths.first),
-                      width: 64,
-                      height: 64,
-                      fit: BoxFit.cover,
-                    )
-                  : Container(
-                      width: 64,
-                      height: 64,
-                      color: AppColors.background,
-                      child: const Icon(Icons.inventory_2, color: AppColors.primaryGreen),
-                    ),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -97,7 +84,8 @@ class _LotCard extends StatelessWidget {
                           lot.subCategory != null
                               ? '${lot.category} · ${lot.subCategory}'
                               : lot.category,
-                          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w700, fontSize: 15),
                         ),
                       ),
                       _StatusBadge(status: lot.syncStatus),
@@ -140,7 +128,8 @@ class _StatusBadge extends StatelessWidget {
       ),
       child: Text(
         status,
-        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: color),
+        style:
+            TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: color),
       ),
     );
   }

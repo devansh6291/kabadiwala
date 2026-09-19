@@ -8,7 +8,7 @@ import '../models/recycler.dart';
 /// depend on the model, not on where the data came from.
 class RecyclerMockData {
   static final List<Recycler> all = [
-    Recycler(
+    const Recycler(
       recyclerId: 'rec_001',
       name: 'GreenCircuit E-Waste Recyclers',
       facilityLat: 22.7196,
@@ -28,7 +28,7 @@ class RecyclerMockData {
       minVehicleCapacityKg: 50,
       hasOwnLogistics: true,
     ),
-    Recycler(
+    const Recycler(
       recyclerId: 'rec_002',
       name: 'Indore Metal & Battery Recovery',
       facilityLat: 22.7532,
@@ -42,7 +42,7 @@ class RecyclerMockData {
       minVehicleCapacityKg: 30,
       hasOwnLogistics: true,
     ),
-    Recycler(
+    const Recycler(
       recyclerId: 'rec_003',
       name: 'ShreeJi Plastic & Household Goods Mfg.',
       facilityLat: 22.6900,
@@ -60,7 +60,7 @@ class RecyclerMockData {
     // Large Kabadiwalas — storage-only custodians, not recyclers.
     // They never appear in the "route to recycler" match; only in the
     // "pool needs storage" fallback.
-    Recycler(
+    const Recycler(
       recyclerId: 'storage_001',
       name: 'Rajesh Bhai (Large Kabadiwala — Storage Point)',
       facilityLat: 22.7300,
@@ -68,11 +68,12 @@ class RecyclerMockData {
       materialsAccepted: ['PCB', 'CRT', 'Cables', 'Battery', 'Motor'],
       authorizationStatus: 'pending',
       contactDetails: '+91-98230-00010',
-      offeredRates: const {},
+      offeredRates: {},
       pickupAvailability: 'none',
       minVehicleCapacityKg: 0,
       hasOwnLogistics: false,
       isStorageOnly: true,
+      storageRatePerItemPerWeek: 30,
     ),
   ];
 

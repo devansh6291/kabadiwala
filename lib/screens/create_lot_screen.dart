@@ -11,6 +11,7 @@ import '../services/classifier_service.dart';
 import '../services/location_service.dart';
 import 'camera_capture_screen.dart';
 import 'classification_result_screen.dart';
+import '../widgets/lot_photo_image.dart';
 
 class CreateLotScreen extends StatefulWidget {
   /// Injected so the real ML classifier can be swapped in later without
@@ -272,14 +273,11 @@ class _CreateLotScreenState extends State<CreateLotScreen> {
                     final path = entry.value;
                     return Stack(
                       children: [
-                        ClipRRect(
+                        LotPhotoImage(
+                          path: path,
+                          width: 84,
+                          height: 84,
                           borderRadius: BorderRadius.circular(10),
-                          child: Image.file(
-                            File(path),
-                            width: 84,
-                            height: 84,
-                            fit: BoxFit.cover,
-                          ),
                         ),
                         Positioned(
                           top: -6,
