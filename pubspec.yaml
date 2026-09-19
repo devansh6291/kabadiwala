@@ -14,7 +14,11 @@ dependencies:
 
   hive: ^2.2.3
   hive_flutter: ^1.1.0
+  # In-app custom camera preview (used instead of image_picker's system camera)
+  camera: ^0.11.0+2
 
+  # SHA-256 hash chaining for the Form-6 manifest checkpoints
+  crypto: ^3.0.3
   # Photo capture for lots
   image_picker: ^1.1.2
 

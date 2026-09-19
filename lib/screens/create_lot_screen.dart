@@ -1,7 +1,6 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:uuid/uuid.dart';
 
 import '../app_colors.dart';
@@ -10,10 +9,13 @@ import '../models/lot.dart';
 import '../models/lot_store.dart';
 import '../services/classifier_service.dart';
 import '../services/location_service.dart';
+import 'camera_capture_screen.dart';
+import 'classification_result_screen.dart';
 
 class CreateLotScreen extends StatefulWidget {
   /// Injected so the real ML classifier can be swapped in later without
-  /// touching this screen. Defaults to the manual stand-in when not provided.
+  /// touching this screen — see lib/services/classifier_service.dart.
+  /// Defaults to the manual stand-in when not provided.
   final ClassifierService? classifierService;
 
   const CreateLotScreen({super.key, this.classifierService});
@@ -24,7 +26,6 @@ class CreateLotScreen extends StatefulWidget {
 
 class _CreateLotScreenState extends State<CreateLotScreen> {
   final TextEditingController weightController = TextEditingController();
-  final ImagePicker _picker = ImagePicker();
   final Uuid _uuid = const Uuid();
   late final ClassifierService _classifierService =
       widget.classifierService ?? ManualClassifierService();
@@ -41,20 +42,12 @@ class _CreateLotScreenState extends State<CreateLotScreen> {
       MaterialCategories.byLabel(selectedCategory);
 
   Future<void> _capturePhoto() async {
-    try {
-      final XFile? shot = await _picker.pickImage(
-        source: ImageSource.camera,
-        maxWidth: 1600,
-        imageQuality: 80,
-      );
-      if (shot == null) return;
-      setState(() => photoPaths.add(shot.path));
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not open camera: $e')),
-      );
-    }
+    final String? path = await Navigator.push<String?>(
+      context,
+      MaterialPageRoute(builder: (context) => const CameraCaptureScreen()),
+    );
+    if (path == null) return;
+    setState(() => photoPaths.add(path));
   }
 
   void _removePhoto(int index) {
@@ -101,7 +94,7 @@ class _CreateLotScreenState extends State<CreateLotScreen> {
     final newLot = Lot(
       id: _uuid.v4(),
       category: selectedCategory,
-      subCategory: selectedSubCategory,
+      subCategory: selectedSubCategory ?? classification.suggestedSubCategory,
       approxWeightKg: weight,
       photoPaths: List.from(photoPaths),
       estimatedValue: classification.estimatedValue,
@@ -116,12 +109,12 @@ class _CreateLotScreenState extends State<CreateLotScreen> {
     if (!mounted) return;
     setState(() => saving = false);
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        backgroundColor: AppColors.primaryGreen,
-        content: Text(
-          'Saved: ${newLot.category} · ${newLot.approxWeightKg} kg '
-          '· ~₹${newLot.estimatedValue?.toStringAsFixed(0)}',
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ClassificationResultScreen(
+          lot: newLot,
+          result: classification,
         ),
       ),
     );
@@ -171,16 +164,20 @@ class _CreateLotScreenState extends State<CreateLotScreen> {
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 150),
                       decoration: BoxDecoration(
-                        color: isSelected ? AppColors.primaryGreen : Colors.white,
+                        color:
+                            isSelected ? AppColors.primaryGreen : Colors.white,
                         borderRadius: BorderRadius.circular(14),
                         border: Border.all(
-                          color: isSelected ? AppColors.primaryGreen : AppColors.lightGreen,
+                          color: isSelected
+                              ? AppColors.primaryGreen
+                              : AppColors.lightGreen,
                           width: 1.5,
                         ),
                         boxShadow: isSelected
                             ? [
                                 BoxShadow(
-                                  color: AppColors.primaryGreen.withValues(alpha: 0.3),
+                                  color: AppColors.primaryGreen
+                                      .withValues(alpha: 0.3),
                                   blurRadius: 6,
                                   offset: const Offset(0, 3),
                                 )
@@ -193,7 +190,9 @@ class _CreateLotScreenState extends State<CreateLotScreen> {
                           Icon(
                             category.icon,
                             size: 28,
-                            color: isSelected ? Colors.white : AppColors.primaryGreen,
+                            color: isSelected
+                                ? Colors.white
+                                : AppColors.primaryGreen,
                           ),
                           const SizedBox(height: 6),
                           Text(
@@ -202,7 +201,9 @@ class _CreateLotScreenState extends State<CreateLotScreen> {
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
-                              color: isSelected ? Colors.white : AppColors.primaryGreen,
+                              color: isSelected
+                                  ? Colors.white
+                                  : AppColors.primaryGreen,
                             ),
                           ),
                         ],
@@ -243,13 +244,15 @@ class _CreateLotScreenState extends State<CreateLotScreen> {
               title: 'Approx weight (kg)',
               child: TextField(
                 controller: weightController,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
                 style: const TextStyle(fontSize: 18),
                 decoration: InputDecoration(
                   filled: true,
                   fillColor: AppColors.background,
                   hintText: 'e.g. 2.5',
-                  prefixIcon: const Icon(Icons.scale, color: AppColors.primaryGreen),
+                  prefixIcon:
+                      const Icon(Icons.scale, color: AppColors.primaryGreen),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                     borderSide: BorderSide.none,
@@ -282,7 +285,8 @@ class _CreateLotScreenState extends State<CreateLotScreen> {
                           top: -6,
                           right: -6,
                           child: IconButton(
-                            icon: const Icon(Icons.cancel, color: Colors.black54, size: 20),
+                            icon: const Icon(Icons.cancel,
+                                color: Colors.black54, size: 20),
                             onPressed: () => _removePhoto(index),
                           ),
                         ),
@@ -297,9 +301,11 @@ class _CreateLotScreenState extends State<CreateLotScreen> {
                       decoration: BoxDecoration(
                         color: AppColors.background,
                         borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: AppColors.lightGreen, width: 1.5),
+                        border:
+                            Border.all(color: AppColors.lightGreen, width: 1.5),
                       ),
-                      child: const Icon(Icons.camera_alt, color: AppColors.primaryGreen, size: 30),
+                      child: const Icon(Icons.camera_alt,
+                          color: AppColors.primaryGreen, size: 30),
                     ),
                   ),
                 ],
@@ -326,7 +332,8 @@ class _CreateLotScreenState extends State<CreateLotScreen> {
                             height: 16,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : const Icon(Icons.my_location, color: AppColors.primaryGreen),
+                        : const Icon(Icons.my_location,
+                            color: AppColors.primaryGreen),
                     label: const Text('Tag GPS'),
                   ),
                 ],
@@ -354,7 +361,8 @@ class _CreateLotScreenState extends State<CreateLotScreen> {
                     : const Icon(Icons.check_circle),
                 label: Text(
                   saving ? 'Estimating value...' : 'Save Lot',
-                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  style: const TextStyle(
+                      fontSize: 18, fontWeight: FontWeight.bold),
                 ),
               ),
             ),
@@ -375,7 +383,10 @@ class _CreateLotScreenState extends State<CreateLotScreen> {
           children: [
             Text(
               title,
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.primaryGreen),
+              style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.primaryGreen),
             ),
             const SizedBox(height: 12),
             child,
