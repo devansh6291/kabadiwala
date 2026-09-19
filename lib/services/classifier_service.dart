@@ -1,57 +1,59 @@
-/// Result of classifying/valuing a lot, whether that came from a real
-/// model or a manual rule-based stand-in.
-class ClassificationResult {
-  /// Instant AI/rule-based value estimate, in ₹ — maps onto `Lot.estimatedValue`.
-  final double estimatedValue;
+/// One item classified from a single photo of it.
+class DetectedItem {
+  /// The photo this classification came from — each item now has its own
+  /// photo (one photo per item, not one shared "whole collection" photo).
+  String photoPath;
 
-  /// A suggested finer classification, e.g. "Motherboard" — maps onto
-  /// `Lot.subCategory`. Null when the classifier has no opinion.
-  final String? suggestedSubCategory;
+  String category;
+  String? subCategory;
+  double estimatedWeightKg;
+  double estimatedValue;
 
-  /// "good" or "bad" — condition of the material as read from the photo.
-  /// Bad-condition items (corroded, badly damaged) get a lower estimate
-  /// and are flagged for the recycler/aggregator to double-check.
-  final String condition;
+  /// "good" or "bad". NOTE: the current model does not actually classify
+  /// physical condition — it only does category + valuation. This stays
+  /// optional and defaults to "good" until/unless a condition signal is
+  /// added on the ML side. Don't treat this as real until confirmed.
+  String? condition;
 
-  /// 0.0–1.0. Used to flag low-confidence classifications for
-  /// human-in-the-loop review on the recycler/aggregator dashboard
-  /// (idea doc, section 9).
-  final double confidence;
+  /// 0.0–1.0, when the classifier provides one.
+  double? confidence;
 
-  const ClassificationResult({
+  DetectedItem({
+    required this.photoPath,
+    required this.category,
+    this.subCategory,
+    required this.estimatedWeightKg,
     required this.estimatedValue,
-    this.suggestedSubCategory,
-    this.condition = 'good',
-    this.confidence = 1.0,
+    this.condition,
+    this.confidence,
   });
 }
 
-/// Anything that can turn a photographed, weighed lot into a value +
-/// condition estimate implements this. Swap [ManualClassifierService] for
-/// a real on-device (TFLite) or cloud-assisted vision model by
-/// implementing this same interface — no UI code needs to change, just
-/// the instantiation in CreateLotScreen.
+/// Anything that can classify ONE photo of ONE item implements this.
+/// The collector takes one photo per item now (not one group photo), so
+/// this runs once per item, from CreateLotScreen's capture loop.
 abstract class ClassifierService {
-  Future<ClassificationResult> classify({
-    required String category,
-    String? subCategory,
-    required double approxWeightKg,
-    required List<String> photoPaths,
+  /// [approxWeightKg] is an optional hint the collector already entered;
+  /// pass it through if you have it — her engine falls back to a
+  /// category weight prior when it's null.
+  Future<DetectedItem> classifyOne({
+    required String photoPath,
+    double? approxWeightKg,
   });
 }
 
-/// TEMPORARY manual/rule-based stand-in for the real ML classifier.
-///
-/// Value: looks up a flat, indicative ₹/kg rate per category and
-/// multiplies by weight. Condition: since there's no real vision model
-/// yet, this derives a *deterministic* good/bad flag from the photo's
-/// file path so the UI has something consistent to demo with — it does
-/// not actually look at the image content.
-///
-/// TODO(ml-team): replace with a real implementation of
-/// [ClassifierService] that inspects `photoPaths` for both material
-/// identification and physical condition.
+/// TEMPORARY manual/rule-based stand-in — does not look at the photo's
+/// actual content. Used until ApiClassifierService (calling the real
+/// Python model over HTTP) is wired in and confirmed working.
 class ManualClassifierService implements ClassifierService {
+  static const List<String> _categories = [
+    'PCB',
+    'CRT',
+    'Cables',
+    'Battery',
+    'Motor',
+    'MixedPlastics'
+  ];
   static const Map<String, double> _indicativeRatePerKg = {
     'PCB': 180,
     'CRT': 8,
@@ -62,27 +64,20 @@ class ManualClassifierService implements ClassifierService {
   };
 
   @override
-  Future<ClassificationResult> classify({
-    required String category,
-    String? subCategory,
-    required double approxWeightKg,
-    required List<String> photoPaths,
+  Future<DetectedItem> classifyOne({
+    required String photoPath,
+    double? approxWeightKg,
   }) async {
+    final seed = photoPath.hashCode.abs();
+    final category = _categories[seed % _categories.length];
+    final weight = approxWeightKg ?? (0.5 + (seed % 40) / 10.0);
     final rate = _indicativeRatePerKg[category] ?? 10.0;
 
-    // Placeholder condition heuristic — NOT real image analysis.
-    final bool looksBad =
-        photoPaths.isNotEmpty && photoPaths.first.hashCode.abs() % 5 == 0;
-    final condition = looksBad ? 'bad' : 'good';
-    final conditionMultiplier = looksBad ? 0.6 : 1.0;
-
-    return ClassificationResult(
-      estimatedValue: double.parse(
-        (rate * approxWeightKg * conditionMultiplier).toStringAsFixed(2),
-      ),
-      suggestedSubCategory: subCategory,
-      condition: condition,
-      confidence: looksBad ? 0.55 : 0.9,
+    return DetectedItem(
+      photoPath: photoPath,
+      category: category,
+      estimatedWeightKg: double.parse(weight.toStringAsFixed(1)),
+      estimatedValue: double.parse((rate * weight).toStringAsFixed(2)),
     );
   }
 }

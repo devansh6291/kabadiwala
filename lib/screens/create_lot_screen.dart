@@ -1,22 +1,17 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
-import 'package:uuid/uuid.dart';
 
 import '../app_colors.dart';
 import '../data/material_categories.dart';
-import '../models/lot.dart';
-import '../models/lot_store.dart';
 import '../services/classifier_service.dart';
 import '../services/location_service.dart';
-import 'camera_capture_screen.dart';
-import 'classification_result_screen.dart';
 import '../widgets/lot_photo_image.dart';
+import 'camera_capture_screen.dart';
+import 'detected_items_review_screen.dart';
 
+/// A collection session: tap "Add Item", take one photo of one item, it
+/// gets classified immediately, repeat for everything collected today,
+/// then review everything at once before routing.
 class CreateLotScreen extends StatefulWidget {
-  /// Injected so the real ML classifier can be swapped in later without
-  /// touching this screen — see lib/services/classifier_service.dart.
-  /// Defaults to the manual stand-in when not provided.
   final ClassifierService? classifierService;
 
   const CreateLotScreen({super.key, this.classifierService});
@@ -26,369 +21,195 @@ class CreateLotScreen extends StatefulWidget {
 }
 
 class _CreateLotScreenState extends State<CreateLotScreen> {
-  final TextEditingController weightController = TextEditingController();
-  final Uuid _uuid = const Uuid();
   late final ClassifierService _classifierService =
       widget.classifierService ?? ManualClassifierService();
 
-  String selectedCategory = MaterialCategories.all.first.label;
-  String? selectedSubCategory;
-  final List<String> photoPaths = [];
-  bool capturingLocation = false;
-  double? capturedLatitude;
-  double? capturedLongitude;
-  bool saving = false;
+  final List<DetectedItem> _items = [];
+  bool _classifying = false;
+  double? _latitude;
+  double? _longitude;
+  bool _capturingLocation = false;
 
-  MaterialCategoryData get _selectedCategoryData =>
-      MaterialCategories.byLabel(selectedCategory);
-
-  Future<void> _capturePhoto() async {
+  Future<void> _addItem() async {
     final String? path = await Navigator.push<String?>(
       context,
       MaterialPageRoute(builder: (context) => const CameraCaptureScreen()),
     );
     if (path == null) return;
-    setState(() => photoPaths.add(path));
+
+    setState(() => _classifying = true);
+    try {
+      final item = await _classifierService.classifyOne(photoPath: path);
+      if (!mounted) return;
+      setState(() => _items.add(item));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Classification failed: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _classifying = false);
+    }
   }
 
-  void _removePhoto(int index) {
-    setState(() => photoPaths.removeAt(index));
+  void _removeItem(int index) {
+    setState(() => _items.removeAt(index));
   }
 
   Future<void> _captureLocation() async {
-    setState(() => capturingLocation = true);
+    setState(() => _capturingLocation = true);
     final position = await LocationService.getCurrentPosition();
     if (!mounted) return;
     setState(() {
-      capturingLocation = false;
-      capturedLatitude = position?.latitude;
-      capturedLongitude = position?.longitude;
+      _capturingLocation = false;
+      _latitude = position?.latitude;
+      _longitude = position?.longitude;
     });
-    if (position == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Location unavailable — lot will save without GPS.'),
-        ),
-      );
-    }
   }
 
-  Future<void> saveLot() async {
-    final double? weight = double.tryParse(weightController.text);
-
-    if (weight == null || weight <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a valid weight')),
-      );
-      return;
-    }
-
-    setState(() => saving = true);
-
-    final classification = await _classifierService.classify(
-      category: selectedCategory,
-      subCategory: selectedSubCategory,
-      approxWeightKg: weight,
-      photoPaths: photoPaths,
-    );
-
-    final newLot = Lot(
-      id: _uuid.v4(),
-      category: selectedCategory,
-      subCategory: selectedSubCategory ?? classification.suggestedSubCategory,
-      approxWeightKg: weight,
-      photoPaths: List.from(photoPaths),
-      estimatedValue: classification.estimatedValue,
-      createdAt: DateTime.now(),
-      latitude: capturedLatitude,
-      longitude: capturedLongitude,
-      syncStatus: 'pending',
-    );
-
-    await LotStore.addLot(newLot);
-
-    if (!mounted) return;
-    setState(() => saving = false);
-
+  void _reviewAll() {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => ClassificationResultScreen(
-          lot: newLot,
-          result: classification,
+        builder: (context) => DetectedItemsReviewScreen(
+          items: List.from(_items),
+          latitude: _latitude,
+          longitude: _longitude,
         ),
       ),
     );
-
-    weightController.clear();
-    setState(() {
-      photoPaths.clear();
-      selectedSubCategory = null;
-      capturedLatitude = null;
-      capturedLongitude = null;
-    });
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(title: const Text('Create Lot')),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _sectionCard(
-              title: 'Select category',
-              child: GridView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 3,
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 12,
-                  childAspectRatio: 1,
+      appBar: AppBar(title: const Text('New Collection')),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    _latitude != null && _longitude != null
+                        ? '📍 ${_latitude!.toStringAsFixed(5)}, ${_longitude!.toStringAsFixed(5)}'
+                        : 'Location not tagged',
+                    style: const TextStyle(fontSize: 13, color: Colors.black54),
+                  ),
                 ),
-                itemCount: MaterialCategories.all.length,
-                itemBuilder: (context, index) {
-                  final category = MaterialCategories.all[index];
-                  final bool isSelected = selectedCategory == category.label;
-
-                  return GestureDetector(
-                    onTap: () {
-                      setState(() {
-                        selectedCategory = category.label;
-                        selectedSubCategory = null;
-                      });
-                    },
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 150),
-                      decoration: BoxDecoration(
-                        color:
-                            isSelected ? AppColors.primaryGreen : Colors.white,
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(
-                          color: isSelected
-                              ? AppColors.primaryGreen
-                              : AppColors.lightGreen,
-                          width: 1.5,
-                        ),
-                        boxShadow: isSelected
-                            ? [
-                                BoxShadow(
-                                  color: AppColors.primaryGreen
-                                      .withValues(alpha: 0.3),
-                                  blurRadius: 6,
-                                  offset: const Offset(0, 3),
-                                )
-                              ]
-                            : [],
-                      ),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            category.icon,
-                            size: 28,
-                            color: isSelected
-                                ? Colors.white
-                                : AppColors.primaryGreen,
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            category.label,
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: isSelected
-                                  ? Colors.white
-                                  : AppColors.primaryGreen,
-                            ),
-                          ),
-                        ],
+                TextButton.icon(
+                  onPressed: _capturingLocation ? null : _captureLocation,
+                  icon: _capturingLocation
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.my_location,
+                          size: 18, color: AppColors.primaryGreen),
+                  label: const Text('Tag GPS'),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: _items.isEmpty
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Text(
+                        _classifying
+                            ? 'Classifying...'
+                            : 'Tap "Add Item" below and photograph one item at a time.',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                            fontSize: 15, color: Colors.black54),
                       ),
                     ),
-                  );
-                },
-              ),
-            ),
-            if (_selectedCategoryData.subCategories.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              _sectionCard(
-                title: 'Sub-category (optional)',
-                child: Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: _selectedCategoryData.subCategories.map((sub) {
-                    final bool isSelected = selectedSubCategory == sub;
-                    return ChoiceChip(
-                      label: Text(sub),
-                      selected: isSelected,
-                      selectedColor: AppColors.primaryGreen,
-                      labelStyle: TextStyle(
-                        color: isSelected ? Colors.white : Colors.black87,
-                      ),
-                      onSelected: (selected) {
-                        setState(() {
-                          selectedSubCategory = selected ? sub : null;
-                        });
-                      },
-                    );
-                  }).toList(),
-                ),
-              ),
-            ],
-            const SizedBox(height: 16),
-            _sectionCard(
-              title: 'Approx weight (kg)',
-              child: TextField(
-                controller: weightController,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
-                style: const TextStyle(fontSize: 18),
-                decoration: InputDecoration(
-                  filled: true,
-                  fillColor: AppColors.background,
-                  hintText: 'e.g. 2.5',
-                  prefixIcon:
-                      const Icon(Icons.scale, color: AppColors.primaryGreen),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide.none,
+                  )
+                : ListView.separated(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    itemCount: _items.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 10),
+                    itemBuilder: (context, index) => _itemTile(index),
                   ),
-                ),
-              ),
+          ),
+          if (_classifying)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: SizedBox(height: 3, child: LinearProgressIndicator()),
             ),
-            const SizedBox(height: 16),
-            _sectionCard(
-              title: 'Photos',
-              child: Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: [
-                  ...photoPaths.asMap().entries.map((entry) {
-                    final index = entry.key;
-                    final path = entry.value;
-                    return Stack(
-                      children: [
-                        LotPhotoImage(
-                          path: path,
-                          width: 84,
-                          height: 84,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        Positioned(
-                          top: -6,
-                          right: -6,
-                          child: IconButton(
-                            icon: const Icon(Icons.cancel,
-                                color: Colors.black54, size: 20),
-                            onPressed: () => _removePhoto(index),
-                          ),
-                        ),
-                      ],
-                    );
-                  }),
-                  GestureDetector(
-                    onTap: _capturePhoto,
-                    child: Container(
-                      width: 84,
-                      height: 84,
-                      decoration: BoxDecoration(
-                        color: AppColors.background,
-                        borderRadius: BorderRadius.circular(10),
-                        border:
-                            Border.all(color: AppColors.lightGreen, width: 1.5),
-                      ),
-                      child: const Icon(Icons.camera_alt,
-                          color: AppColors.primaryGreen, size: 30),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.primaryGreen,
+                      side: const BorderSide(
+                          color: AppColors.primaryGreen, width: 1.5),
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14)),
                     ),
+                    onPressed: _classifying ? null : _addItem,
+                    icon: const Icon(Icons.add_a_photo),
+                    label: Text(_items.isEmpty ? 'Add Item' : 'Add Another'),
                   ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            _sectionCard(
-              title: 'Location',
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      capturedLatitude != null && capturedLongitude != null
-                          ? '${capturedLatitude!.toStringAsFixed(5)}, ${capturedLongitude!.toStringAsFixed(5)}'
-                          : 'Not captured yet',
-                      style: const TextStyle(fontSize: 14),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primaryYellow,
+                      foregroundColor: Colors.black,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14)),
                     ),
-                  ),
-                  TextButton.icon(
-                    onPressed: capturingLocation ? null : _captureLocation,
-                    icon: capturingLocation
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.my_location,
-                            color: AppColors.primaryGreen),
-                    label: const Text('Tag GPS'),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 28),
-            SizedBox(
-              width: double.infinity,
-              height: 56,
-              child: ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primaryYellow,
-                  foregroundColor: Colors.black,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
+                    onPressed: _items.isEmpty ? null : _reviewAll,
+                    icon: const Icon(Icons.checklist),
+                    label: Text('Review (${_items.length})'),
                   ),
                 ),
-                onPressed: saving ? null : saveLot,
-                icon: saving
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.check_circle),
-                label: Text(
-                  saving ? 'Estimating value...' : 'Save Lot',
-                  style: const TextStyle(
-                      fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-              ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _sectionCard({required String title, required Widget child}) {
+  Widget _itemTile(int index) {
+    final item = _items[index];
+    final categoryData = MaterialCategories.byLabel(item.category);
+
     return Card(
       elevation: 1,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      child: ListTile(
+        leading: LotPhotoImage(
+          path: item.photoPath,
+          width: 48,
+          height: 48,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        title: Row(
           children: [
-            Text(
-              title,
-              style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.primaryGreen),
-            ),
-            const SizedBox(height: 12),
-            child,
+            Icon(categoryData.icon, size: 16, color: AppColors.primaryGreen),
+            const SizedBox(width: 6),
+            Text(item.subCategory != null
+                ? '${item.category} · ${item.subCategory}'
+                : item.category),
           ],
+        ),
+        subtitle: Text(
+            '${item.estimatedWeightKg} kg · ~₹${item.estimatedValue.toStringAsFixed(0)}'),
+        trailing: IconButton(
+          icon: const Icon(Icons.delete_outline, color: Colors.black45),
+          onPressed: () => _removeItem(index),
         ),
       ),
     );

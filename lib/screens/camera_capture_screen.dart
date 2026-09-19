@@ -61,8 +61,9 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
 
   Future<void> _capture() async {
     final controller = _controller;
-    if (controller == null || !controller.value.isInitialized || _capturing)
+    if (controller == null || !controller.value.isInitialized || _capturing) {
       return;
+    }
 
     setState(() => _capturing = true);
     try {

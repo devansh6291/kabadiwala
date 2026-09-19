@@ -138,8 +138,8 @@ class _Form6SigningScreenState extends State<Form6SigningScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Manifest ID',
-                        style: const TextStyle(color: Colors.black54)),
+                    const Text('Manifest ID',
+                        style: TextStyle(color: Colors.black54)),
                     SelectableText(_manifest.manifestId,
                         style: const TextStyle(fontWeight: FontWeight.w600)),
                     const SizedBox(height: 8),
