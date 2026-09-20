@@ -42,18 +42,19 @@ class ApiClassifierService implements ClassifierService {
 
     final Map<String, double>? confidenceScores =
         (json['confidence'] as Map<String, dynamic>?)
-            ?.map((k, v) => MapEntry(k, (v as num).toDouble()));
+            ?.map((k, v) => MapEntry(k, ((v as num?) ?? 0).toDouble()));
 
     final Map<String, double>? materialComposition =
         (json['materialProbabilities'] as Map<String, dynamic>?)
-            ?.map((k, v) => MapEntry(k, (v as num).toDouble()));
+            ?.map((k, v) => MapEntry(k, ((v as num?) ?? 0).toDouble()));
 
     return DetectedItem(
       photoPath: photoPath,
-      category: json['category'] as String,
+      category: (json['category'] as String?) ?? 'Unknown',
       subCategory: json['subCategory'] as String?,
-      estimatedWeightKg: (json['approxWeightKg'] as num).toDouble(),
-      estimatedValue: (json['estimatedValue'] as num).toDouble(),
+      estimatedWeightKg:
+          (json['approxWeightKg'] as num?)?.toDouble() ?? approxWeightKg ?? 0.5,
+      estimatedValue: (json['estimatedValue'] as num?)?.toDouble() ?? 0.0,
       condition: json['physicalCondition'] as String?,
       confidence: confidenceScores?['category'],
       routeType: json['pipelineRoute'] as String?,
