@@ -19,19 +19,19 @@ class CollectorStore {
   static Box<CollectorProfile> get _requireBox {
     final box = _box;
     if (box == null) {
-      throw StateError(
-          'CollectorStore.init() must be called before use (see main.dart).');
+      throw StateError('CollectorStore.init() must be called before use.');
     }
     return box;
   }
 
-  /// Returns the existing profile, or creates an empty, not-yet-onboarded
-  /// one with a fresh collectorId on first launch.
-  static CollectorProfile getOrCreate() {
+  static CollectorProfile getOrCreate({String? phoneNumber}) {
     final existing = _requireBox.get(_key);
     if (existing != null) return existing;
 
-    final fresh = CollectorProfile(collectorId: const Uuid().v4());
+    final fresh = CollectorProfile(
+      collectorId: const Uuid().v4(),
+      phoneNumber: phoneNumber ?? '',
+    );
     _requireBox.put(_key, fresh);
     return fresh;
   }

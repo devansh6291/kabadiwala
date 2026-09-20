@@ -10,35 +10,31 @@ dependencies:
   flutter:
     sdk: flutter
 
-  flutter_riverpod: ^2.5.1
-
+  # Local Offline Database (Hive)
   hive: ^2.2.3
   hive_flutter: ^1.1.0
-  # In-app custom camera preview (used instead of image_picker's system camera)
-  camera: ^0.12.1
 
-  # SHA-256 hash chaining for the Form-6 manifest checkpoints
-  crypto: ^3.0.3
-  # Photo capture for lots
+  # Firebase Suite
+  firebase_core: ^3.6.0
+  firebase_auth: ^5.3.1
+  firebase_storage: ^12.3.2
+
+  # Networking & Interceptors
+  dio: ^5.7.0
+
+  # Camera & Images
+  camera: ^0.12.1
   image_picker: ^1.1.2
 
-  # GPS tagging at lot creation
+  # Location & Geocoding
   geolocator: ^13.0.1
-
-  # Reverse-geocodes GPS coordinates into a readable place name
   geocoding: ^5.0.0
 
-  # Runtime permission prompts (camera/location)
+  # Security & Compliance
+  crypto: ^3.0.3
   permission_handler: ^11.3.1
-
-  # Unique, on-device lot IDs (matches data dictionary: id is a uuid)
   uuid: ^4.5.1
-
-  # Human-friendly relative timestamps in the lot history list
   intl: ^0.19.0
-
-  #http calling
-  http: ^1.2.2
 
 dev_dependencies:
   flutter_test:

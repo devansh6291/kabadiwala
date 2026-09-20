@@ -3,11 +3,13 @@ import 'package:flutter/material.dart';
 import '../app_colors.dart';
 import '../app_strings.dart';
 import '../models/lot_store.dart';
+import '../models/collector_store.dart';
+import '../services/api_client.dart';
+import '../services/api_classifier_service.dart';
+import '../services/sync_service.dart';
 import 'create_lot_screen.dart';
 import 'lot_history_screen.dart';
 import 'profile_screen.dart';
-import '../services/api_classifier_service.dart';
-import '../models/collector_store.dart';
 
 class HomeScreen extends StatefulWidget {
   final String currentLanguage;
@@ -24,6 +26,15 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  @override
+  void initState() {
+    super.initState();
+    // Automatically trigger offline sync whenever dashboard mounts
+    SyncService().syncPendingLots().then((synced) {
+      if (synced > 0 && mounted) setState(() {});
+    });
+  }
+
   String _greetingKey() {
     final hour = DateTime.now().hour;
     if (hour < 12) return 'greetingMorning';
@@ -34,7 +45,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _openAndRefresh(Widget screen) async {
     await Navigator.push(
         context, MaterialPageRoute(builder: (context) => screen));
-    if (mounted) setState(() {}); // refresh stats after returning
+    if (mounted) setState(() {}); // Refresh local counters
   }
 
   @override
@@ -51,6 +62,22 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         title: Text(AppStrings.get('appTitle', lang)),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.sync),
+            tooltip: 'Sync offline lots',
+            onPressed: () async {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Checking pending uploads...')),
+              );
+              final count = await SyncService().syncPendingLots();
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Synced $count pending lot(s).')),
+                );
+                setState(() {});
+              }
+            },
+          ),
           DropdownButton<String>(
             value: lang,
             dropdownColor: AppColors.primaryGreen,
@@ -84,7 +111,7 @@ class _HomeScreenState extends State<HomeScreen> {
               color: AppColors.primaryGreen,
               onTap: () => _openAndRefresh(CreateLotScreen(
                 classifierService:
-                    ApiClassifierService(baseUrl: 'http://192.168.98.41:8000'),
+                    ApiClassifierService(baseUrl: ApiClient.defaultBaseUrl),
               )),
             ),
             const SizedBox(height: 14),
@@ -117,7 +144,7 @@ class _HomeScreenState extends State<HomeScreen> {
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
+        gradient: const LinearGradient(
           colors: [AppColors.primaryGreen, AppColors.lightGreen],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,

@@ -5,12 +5,19 @@ import 'models/lot_store.dart';
 import 'models/collector_store.dart';
 import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
+import 'services/firebase_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // 1. Initialize Firebase
+  await FirebaseService.init();
+
+  // 2. Initialize Hive local databases
   await Hive.initFlutter();
   await LotStore.init();
   await CollectorStore.init();
+
   runApp(const MyApp());
 }
 
@@ -49,6 +56,7 @@ class _MyAppState extends State<MyApp> {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Kabadiwala Connect',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
         scaffoldBackgroundColor: AppColors.background,
         appBarTheme: const AppBarTheme(

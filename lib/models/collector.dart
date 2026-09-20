@@ -1,83 +1,75 @@
-/// Collector — profile including onboarding fields (name, age, Aadhaar).
-///
-/// NOTE: the data dictionary calls for keeping this minimal — name, age,
-/// and Aadhaar go beyond that on purpose, per an explicit product
-/// decision. Aadhaar numbers carry real legal handling requirements in
-/// India (UIDAI rules on storage/sharing) — this stores it locally only;
-/// if it's ever synced to a backend, it must be encrypted in transit and
-/// at rest, not sent as plain text.
+/// Collector — minimal profile matching SIH26229 compliance guidelines.
 class CollectorProfile {
   String collectorId;
+  String phoneNumber;
   String name;
   int? age;
-  String aadharNumber;
   String preferredLanguage;
   String operatingLocation;
-  String phoneNumber;
   List<String> transactionHistoryIds;
   double totalEarnings;
   bool hasOwnLogistics;
   double? latitude;
   double? longitude;
-
-  /// True once the one-time login/onboarding form has been completed.
   bool isOnboarded;
 
   CollectorProfile({
     required this.collectorId,
+    required this.phoneNumber,
     this.name = '',
     this.age,
-    this.aadharNumber = '',
     this.preferredLanguage = 'hi',
     this.operatingLocation = '',
-    this.phoneNumber = '',
     List<String>? transactionHistoryIds,
-    this.totalEarnings = 0,
+    this.totalEarnings = 0.0,
     this.hasOwnLogistics = false,
     this.latitude,
     this.longitude,
     this.isOnboarded = false,
   }) : transactionHistoryIds = transactionHistoryIds ?? [];
 
-  /// Last-4-only display, e.g. "XXXX XXXX 1234". Use this everywhere in
-  /// the UI instead of the raw number.
-  String get maskedAadhar {
-    if (aadharNumber.length != 12)
-      return aadharNumber.isEmpty ? '—' : aadharNumber;
-    return 'XXXX XXXX ${aadharNumber.substring(8)}';
-  }
-
   Map<String, dynamic> toJson() => {
-        'collectorId': collectorId,
+        'collector_id': collectorId,
+        'phone_number': phoneNumber,
         'name': name,
         'age': age,
-        'aadharNumber': aadharNumber,
-        'preferredLanguage': preferredLanguage,
-        'operatingLocation': operatingLocation,
-        'phoneNumber': phoneNumber,
-        'transactionHistoryIds': transactionHistoryIds,
-        'totalEarnings': totalEarnings,
-        'hasOwnLogistics': hasOwnLogistics,
+        'preferred_language': preferredLanguage,
+        'operating_location': operatingLocation,
+        'transaction_history_ids': transactionHistoryIds,
+        'total_earnings': totalEarnings,
+        'has_own_logistics': hasOwnLogistics,
         'latitude': latitude,
         'longitude': longitude,
-        'isOnboarded': isOnboarded,
+        'is_onboarded': isOnboarded,
       };
 
   factory CollectorProfile.fromJson(Map<String, dynamic> json) =>
       CollectorProfile(
-        collectorId: json['collectorId'] as String,
-        name: json['name'] as String? ?? '',
+        collectorId:
+            (json['collector_id'] ?? json['collectorId'] ?? '').toString(),
+        phoneNumber:
+            (json['phone_number'] ?? json['phoneNumber'] ?? '').toString(),
+        name: (json['name'] ?? '').toString(),
         age: json['age'] as int?,
-        aadharNumber: json['aadharNumber'] as String? ?? '',
-        preferredLanguage: json['preferredLanguage'] as String? ?? 'hi',
-        operatingLocation: json['operatingLocation'] as String? ?? '',
-        phoneNumber: json['phoneNumber'] as String? ?? '',
+        preferredLanguage:
+            (json['preferred_language'] ?? json['preferredLanguage'] ?? 'hi')
+                .toString(),
+        operatingLocation:
+            (json['operating_location'] ?? json['operatingLocation'] ?? '')
+                .toString(),
         transactionHistoryIds: List<String>.from(
-            json['transactionHistoryIds'] as List? ?? const []),
-        totalEarnings: (json['totalEarnings'] as num?)?.toDouble() ?? 0,
-        hasOwnLogistics: json['hasOwnLogistics'] as bool? ?? false,
+            json['transaction_history_ids'] ??
+                json['transactionHistoryIds'] ??
+                const []),
+        totalEarnings:
+            ((json['total_earnings'] ?? json['totalEarnings'] ?? 0.0) as num)
+                .toDouble(),
+        hasOwnLogistics: (json['has_own_logistics'] ??
+            json['hasOwnLogistics'] ??
+            false) as bool,
         latitude: (json['latitude'] as num?)?.toDouble(),
         longitude: (json['longitude'] as num?)?.toDouble(),
-        isOnboarded: json['isOnboarded'] as bool? ?? false,
+        isOnboarded:
+            (json['is_onboarded'] ?? json['isOnboarded'] ?? false) as bool,
       );
 }
