@@ -15,7 +15,7 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  late CollectorProfile _profile = CollectorStore.getOrCreate();
+  late final CollectorProfile _profile = CollectorStore.getOrCreate();
   late final TextEditingController _nameController =
       TextEditingController(text: _profile.name);
   late final TextEditingController _ageController =
@@ -24,8 +24,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       TextEditingController(text: _profile.operatingLocation);
   late final TextEditingController _phoneController =
       TextEditingController(text: _profile.phoneNumber);
+
   bool _saving = false;
-  bool _showFullAadhar = false;
 
   @override
   void dispose() {
@@ -42,7 +42,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _profile.age = int.tryParse(_ageController.text.trim());
     _profile.operatingLocation = _locationController.text.trim();
     _profile.phoneNumber = _phoneController.text.trim();
+
     await CollectorStore.save(_profile);
+
     if (!mounted) return;
     setState(() => _saving = false);
     ScaffoldMessenger.of(context).showSnackBar(
@@ -88,28 +90,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     borderRadius: BorderRadius.circular(12),
                     borderSide: BorderSide.none),
               ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          _sectionCard(
-            title: 'Aadhaar number',
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    _showFullAadhar
-                        ? _profile.aadharNumber
-                        : _profile.maskedAadhar,
-                    style:
-                        const TextStyle(fontFamily: 'monospace', fontSize: 15),
-                  ),
-                ),
-                TextButton(
-                  onPressed: () =>
-                      setState(() => _showFullAadhar = !_showFullAadhar),
-                  child: Text(_showFullAadhar ? 'Hide' : 'Show'),
-                ),
-              ],
             ),
           ),
           const SizedBox(height: 16),

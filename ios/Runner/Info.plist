@@ -66,5 +66,13 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>Kabadiwala Connect needs camera access to photograph and classify scrap materials.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Kabadiwala Connect needs access to your photo library to select lot images.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Kabadiwala Connect needs your location to map collection points and match you with nearby recyclers.</string>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>Kabadiwala Connect needs your location to map collection points and match you with nearby recyclers.</string>
 </dict>
 </plist>

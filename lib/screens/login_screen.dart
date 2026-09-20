@@ -1,15 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:geocoding/geocoding.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import '../app_colors.dart';
 import '../app_strings.dart';
-import '../models/collector.dart';
 import '../models/collector_store.dart';
 import '../services/location_service.dart';
+import '../services/firebase_service.dart';
 
-/// One-time onboarding/login screen. Shown only when
-/// CollectorStore.isOnboarded() is false — see main.dart. Once completed,
-/// the app never shows this again on later launches.
+/// One-time onboarding/login screen with Real Firebase OTP.
 class LoginScreen extends StatefulWidget {
   final ValueChanged<String> onComplete;
 
@@ -23,28 +22,31 @@ class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _ageController = TextEditingController();
-  final _aadharController = TextEditingController();
   final _phoneController = TextEditingController();
-  String _language = 'hi';
+  final _otpController = TextEditingController();
 
+  String _language = 'hi';
   bool _locating = true;
   double? _latitude;
   double? _longitude;
   String _locationLabel = 'Detecting your location...';
+
   bool _saving = false;
+  bool _otpSent = false;
+  String? _verificationId;
 
   @override
   void initState() {
     super.initState();
-    _autoDetectLocation(); // no button — happens automatically on load
+    _autoDetectLocation();
   }
 
   @override
   void dispose() {
     _nameController.dispose();
     _ageController.dispose();
-    _aadharController.dispose();
     _phoneController.dispose();
+    _otpController.dispose();
     super.dispose();
   }
 
@@ -55,8 +57,7 @@ class _LoginScreenState extends State<LoginScreen> {
     if (position == null) {
       setState(() {
         _locating = false;
-        _locationLabel =
-            'Location unavailable — you can add it later from your profile.';
+        _locationLabel = 'Location unavailable — you can add it later.';
       });
       return;
     }
@@ -65,9 +66,8 @@ class _LoginScreenState extends State<LoginScreen> {
     _longitude = position.longitude;
 
     try {
-      final geocodingService = Geocoding();
-      final placemarks = await geocodingService.placemarkFromCoordinates(
-          position.latitude, position.longitude);
+      final placemarks = await Geocoding()
+          .placemarkFromCoordinates(position.latitude, position.longitude);
       if (placemarks.isNotEmpty) {
         final p = placemarks.first;
         final parts = <String>[
@@ -85,9 +85,7 @@ class _LoginScreenState extends State<LoginScreen> {
         });
         return;
       }
-    } catch (_) {
-      // Reverse geocoding failed (no network/offline) — fall back to raw coordinates.
-    }
+    } catch (_) {}
 
     if (!mounted) return;
     setState(() {
@@ -97,27 +95,91 @@ class _LoginScreenState extends State<LoginScreen> {
     });
   }
 
-  Future<void> _submit() async {
+  Future<void> _sendOtp() async {
     if (!_formKey.currentState!.validate()) return;
-
     setState(() => _saving = true);
 
-    final profile = CollectorStore.getOrCreate();
-    profile.name = _nameController.text.trim();
-    profile.age = int.tryParse(_ageController.text.trim());
-    profile.aadharNumber = _aadharController.text.trim();
-    profile.phoneNumber = _phoneController.text.trim();
-    profile.preferredLanguage = _language;
-    profile.operatingLocation = _locationLabel;
-    profile.latitude = _latitude;
-    profile.longitude = _longitude;
-    profile.isOnboarded = true;
+    // Firebase expects phone numbers with country codes. Defaulting to India (+91)
+    final phone = '+91${_phoneController.text.trim()}';
 
-    await CollectorStore.save(profile);
+    await FirebaseService().sendOtp(
+      phoneNumber: phone,
+      onCodeSent: (String verificationId) {
+        if (!mounted) return;
+        setState(() {
+          _verificationId = verificationId;
+          _otpSent = true;
+          _saving = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('OTP Sent!')),
+        );
+      },
+      onVerificationFailed: (FirebaseAuthException error) {
+        if (!mounted) return;
+        setState(() => _saving = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Verification Failed: ${error.message}')),
+        );
+      },
+      onAutoVerified: (PhoneAuthCredential credential) async {
+        // Auto-resolution for Android
+        await _finalizeLogin(credential);
+      },
+    );
+  }
 
-    if (!mounted) return;
-    setState(() => _saving = false);
-    widget.onComplete(_language);
+  Future<void> _verifyOtp() async {
+    if (_otpController.text.trim().length != 6) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter a valid 6-digit OTP')),
+      );
+      return;
+    }
+
+    setState(() => _saving = true);
+    try {
+      final credential = PhoneAuthProvider.credential(
+        verificationId: _verificationId!,
+        smsCode: _otpController.text.trim(),
+      );
+      await _finalizeLogin(credential);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _saving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Invalid OTP. Please try again.')),
+      );
+    }
+  }
+
+  Future<void> _finalizeLogin(PhoneAuthCredential credential) async {
+    try {
+      await FirebaseAuth.instance.signInWithCredential(credential);
+
+      final profile =
+          CollectorStore.getOrCreate(phoneNumber: _phoneController.text.trim());
+      profile.name = _nameController.text.trim();
+      profile.age = int.tryParse(_ageController.text.trim());
+      profile.phoneNumber = _phoneController.text.trim();
+      profile.preferredLanguage = _language;
+      profile.operatingLocation = _locationLabel;
+      profile.latitude = _latitude;
+      profile.longitude = _longitude;
+      profile.isOnboarded = true;
+
+      await CollectorStore.save(profile);
+
+      if (!mounted) return;
+      setState(() => _saving = false);
+      widget.onComplete(_language);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _saving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Login failed: $e')),
+      );
+    }
   }
 
   @override
@@ -148,142 +210,196 @@ class _LoginScreenState extends State<LoginScreen> {
                   style: TextStyle(color: Colors.black54),
                 ),
                 const SizedBox(height: 28),
-                const Text('Full name',
-                    style: TextStyle(fontWeight: FontWeight.w600)),
-                const SizedBox(height: 6),
-                TextFormField(
-                  controller: _nameController,
-                  decoration: _fieldDecoration('e.g. Ramesh Kumar'),
-                  validator: (v) => (v == null || v.trim().isEmpty)
-                      ? 'Name is required'
-                      : null,
-                ),
-                const SizedBox(height: 16),
-                const Text('Age',
-                    style: TextStyle(fontWeight: FontWeight.w600)),
-                const SizedBox(height: 6),
-                TextFormField(
-                  controller: _ageController,
-                  keyboardType: TextInputType.number,
-                  decoration: _fieldDecoration('e.g. 34'),
-                  validator: (v) {
-                    final age = int.tryParse(v?.trim() ?? '');
-                    if (age == null || age < 14 || age > 100)
-                      return 'Enter a valid age';
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 16),
-                const Text('Aadhaar number',
-                    style: TextStyle(fontWeight: FontWeight.w600)),
-                const SizedBox(height: 6),
-                TextFormField(
-                  controller: _aadharController,
-                  keyboardType: TextInputType.number,
-                  maxLength: 12,
-                  decoration: _fieldDecoration('12-digit Aadhaar number')
-                      .copyWith(counterText: ''),
-                  validator: (v) {
-                    final digits = (v ?? '').trim();
-                    if (digits.length != 12 || int.tryParse(digits) == null) {
-                      return 'Enter a valid 12-digit Aadhaar number';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 16),
-                const Text('Phone number',
-                    style: TextStyle(fontWeight: FontWeight.w600)),
-                const SizedBox(height: 6),
-                TextFormField(
-                  controller: _phoneController,
-                  keyboardType: TextInputType.phone,
-                  maxLength: 10,
-                  decoration:
-                      _fieldDecoration('For OTP login & signing manifests')
-                          .copyWith(counterText: ''),
-                  validator: (v) {
-                    final digits = (v ?? '').trim();
-                    if (digits.length != 10 || int.tryParse(digits) == null) {
-                      return 'Enter a valid 10-digit phone number';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 16),
-                const Text('Preferred language',
-                    style: TextStyle(fontWeight: FontWeight.w600)),
-                const SizedBox(height: 6),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.lightGreen),
+                if (!_otpSent) ...[
+                  // --- PROFILE INPUT STAGE ---
+                  const Text('Full name',
+                      style: TextStyle(fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 6),
+                  TextFormField(
+                    controller: _nameController,
+                    decoration: _fieldDecoration('e.g. Ramesh Kumar'),
+                    validator: (v) => (v == null || v.trim().isEmpty)
+                        ? 'Name is required'
+                        : null,
                   ),
-                  child: DropdownButton<String>(
-                    value: AppStrings.languageNames.containsKey(_language)
-                        ? _language
-                        : AppStrings.languageNames.keys.first,
-                    isExpanded: true,
-                    underline: const SizedBox(),
-                    items: AppStrings.languageNames.entries
-                        .map((e) => DropdownMenuItem(
-                            value: e.key, child: Text(e.value)))
-                        .toList(),
-                    onChanged: (value) {
-                      if (value == null) return;
-                      setState(() => _language = value);
+                  const SizedBox(height: 16),
+                  const Text('Age',
+                      style: TextStyle(fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 6),
+                  TextFormField(
+                    controller: _ageController,
+                    keyboardType: TextInputType.number,
+                    decoration: _fieldDecoration('e.g. 34'),
+                    validator: (v) {
+                      final age = int.tryParse(v?.trim() ?? '');
+                      if (age == null || age < 14 || age > 100)
+                        return 'Enter a valid age';
+                      return null;
                     },
                   ),
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Icon(
-                      _locating ? Icons.my_location : Icons.location_on,
-                      color: AppColors.primaryGreen,
-                      size: 20,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        _locating
-                            ? _locationLabel
-                            : 'Area detected: $_locationLabel',
-                        style: const TextStyle(
-                            fontSize: 13, color: Colors.black54),
+                  const SizedBox(height: 16),
+                  const Text('Phone number',
+                      style: TextStyle(fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 6),
+                  TextFormField(
+                    controller: _phoneController,
+                    keyboardType: TextInputType.phone,
+                    maxLength: 10,
+                    decoration:
+                        _fieldDecoration('10-digit number (OTP will be sent)')
+                            .copyWith(
+                      counterText: '',
+                      prefixIcon: const Padding(
+                        padding: EdgeInsets.all(14.0),
+                        child: Text('+91 ',
+                            style: TextStyle(
+                                fontWeight: FontWeight.bold, fontSize: 16)),
                       ),
                     ),
-                    if (_locating)
-                      const SizedBox(
-                          width: 14,
-                          height: 14,
-                          child: CircularProgressIndicator(strokeWidth: 2)),
-                  ],
-                ),
-                const SizedBox(height: 28),
-                SizedBox(
-                  height: 54,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primaryGreen,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14)),
-                    ),
-                    onPressed: _saving ? null : _submit,
-                    child: _saving
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                                strokeWidth: 2, color: Colors.white))
-                        : const Text('Continue',
-                            style: TextStyle(
-                                fontSize: 16, fontWeight: FontWeight.bold)),
+                    validator: (v) {
+                      final digits = (v ?? '').trim();
+                      if (digits.length != 10 || int.tryParse(digits) == null) {
+                        return 'Enter a valid 10-digit phone number';
+                      }
+                      return null;
+                    },
                   ),
-                ),
+                  const SizedBox(height: 16),
+                  const Text('Preferred language',
+                      style: TextStyle(fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.lightGreen),
+                    ),
+                    child: DropdownButton<String>(
+                      value: AppStrings.languageNames.containsKey(_language)
+                          ? _language
+                          : AppStrings.languageNames.keys.first,
+                      isExpanded: true,
+                      underline: const SizedBox(),
+                      items: AppStrings.languageNames.entries
+                          .map((e) => DropdownMenuItem(
+                              value: e.key, child: Text(e.value)))
+                          .toList(),
+                      onChanged: (value) {
+                        if (value == null) return;
+                        setState(() => _language = value);
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Icon(
+                        _locating ? Icons.my_location : Icons.location_on,
+                        color: AppColors.primaryGreen,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _locating
+                              ? _locationLabel
+                              : 'Area detected: $_locationLabel',
+                          style: const TextStyle(
+                              fontSize: 13, color: Colors.black54),
+                        ),
+                      ),
+                      if (_locating)
+                        const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2)),
+                    ],
+                  ),
+                  const SizedBox(height: 28),
+                  SizedBox(
+                    height: 54,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primaryGreen,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14)),
+                      ),
+                      onPressed: _saving ? null : _sendOtp,
+                      child: _saving
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2, color: Colors.white))
+                          : const Text('Send OTP',
+                              style: TextStyle(
+                                  fontSize: 16, fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                ] else ...[
+                  // --- OTP VERIFICATION STAGE ---
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: AppColors.lightGreen.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.primaryGreen),
+                    ),
+                    child: Column(
+                      children: [
+                        Text(
+                          'OTP sent to +91 ${_phoneController.text}',
+                          style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.primaryGreen),
+                        ),
+                        const SizedBox(height: 16),
+                        TextFormField(
+                          controller: _otpController,
+                          keyboardType: TextInputType.number,
+                          textAlign: TextAlign.center,
+                          maxLength: 6,
+                          style: const TextStyle(
+                              fontSize: 24,
+                              letterSpacing: 8,
+                              fontWeight: FontWeight.bold),
+                          decoration: _fieldDecoration('------')
+                              .copyWith(counterText: ''),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    height: 54,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primaryYellow,
+                        foregroundColor: Colors.black,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14)),
+                      ),
+                      onPressed: _saving ? null : _verifyOtp,
+                      child: _saving
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2, color: Colors.black))
+                          : const Text('Verify & Login',
+                              style: TextStyle(
+                                  fontSize: 16, fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed:
+                        _saving ? null : () => setState(() => _otpSent = false),
+                    child: const Text('Change Phone Number',
+                        style: TextStyle(color: Colors.black54)),
+                  ),
+                ],
               ],
             ),
           ),
@@ -299,10 +415,10 @@ class _LoginScreenState extends State<LoginScreen> {
       fillColor: Colors.white,
       border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: AppColors.lightGreen)),
+          borderSide: const BorderSide(color: AppColors.lightGreen)),
       enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: AppColors.lightGreen)),
+          borderSide: const BorderSide(color: AppColors.lightGreen)),
     );
   }
 }
