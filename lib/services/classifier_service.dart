@@ -9,14 +9,27 @@ class DetectedItem {
   double estimatedWeightKg;
   double estimatedValue;
 
-  /// "good" or "bad". NOTE: the current model does not actually classify
-  /// physical condition — it only does category + valuation. This stays
-  /// optional and defaults to "good" until/unless a condition signal is
-  /// added on the ML side. Don't treat this as real until confirmed.
+  /// "Scrap_Only" or similar — sourced from the model's physicalCondition.
   String? condition;
 
-  /// 0.0–1.0, when the classifier provides one.
+  /// Single overall confidence (0.0–1.0) for quick display — currently
+  /// set to the model's "category" confidence sub-score. See
+  /// [confidenceScores] for the full breakdown.
   double? confidence;
+
+  /// "E_WASTE" or "PLASTIC" — drives dual routing (idea doc §3.2).
+  String? routeType;
+
+  /// % composition by weight/probability, e.g. {"Copper": 0.50, "Aluminum": 0.49}.
+  /// This is the copper/gold/silver data — populated for e-waste items.
+  Map<String, double>? materialComposition;
+
+  /// Named materials the model flagged as present, e.g. ["Copper", "Gold_Plated_Connectors"].
+  List<String>? detectedMaterials;
+
+  /// Full confidence breakdown per pipeline stage:
+  /// segregation, category, subCategory, condition.
+  Map<String, double>? confidenceScores;
 
   DetectedItem({
     required this.photoPath,
@@ -26,16 +39,15 @@ class DetectedItem {
     required this.estimatedValue,
     this.condition,
     this.confidence,
+    this.routeType,
+    this.materialComposition,
+    this.detectedMaterials,
+    this.confidenceScores,
   });
 }
 
 /// Anything that can classify ONE photo of ONE item implements this.
-/// The collector takes one photo per item now (not one group photo), so
-/// this runs once per item, from CreateLotScreen's capture loop.
 abstract class ClassifierService {
-  /// [approxWeightKg] is an optional hint the collector already entered;
-  /// pass it through if you have it — her engine falls back to a
-  /// category weight prior when it's null.
   Future<DetectedItem> classifyOne({
     required String photoPath,
     double? approxWeightKg,
@@ -43,8 +55,7 @@ abstract class ClassifierService {
 }
 
 /// TEMPORARY manual/rule-based stand-in — does not look at the photo's
-/// actual content. Used until ApiClassifierService (calling the real
-/// Python model over HTTP) is wired in and confirmed working.
+/// actual content.
 class ManualClassifierService implements ClassifierService {
   static const List<String> _categories = [
     'PCB',

@@ -82,7 +82,7 @@ class _HomeScreenState extends State<HomeScreen> {
               color: AppColors.primaryGreen,
               onTap: () => _openAndRefresh(CreateLotScreen(
                 classifierService:
-                    ApiClassifierService(baseUrl: 'http://192.168.98.41:8000'),
+                    ApiClassifierService(baseUrl: 'http://127.0.0.1:8000'),
               )),
             ),
             const SizedBox(height: 14),
