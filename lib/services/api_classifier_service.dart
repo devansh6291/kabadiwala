@@ -1,44 +1,42 @@
-import 'dart:convert';
-
-import 'package:flutter/foundation.dart' show debugPrint;
-import 'package:http/http.dart' as http;
-
+import 'package:dio/dio.dart';
+import 'api_client.dart';
 import 'classifier_service.dart';
 
-/// Calls the real ML model over HTTP (see ai_model/server.py, which
-/// wraps KabadiwalaAIInferenceEngine.predict()). Swap this in for
-/// ManualClassifierService once server.py is confirmed working — no
-/// other app code changes, since both implement ClassifierService.
+/// Calls the PyTorch inference engine running inside the unified FastAPI backend.
 class ApiClassifierService implements ClassifierService {
-  final String baseUrl;
+  final Dio _dio;
 
-  ApiClassifierService({required this.baseUrl});
+  ApiClassifierService({String? baseUrl}) : _dio = ApiClient().dio {
+    if (baseUrl != null && baseUrl.isNotEmpty) {
+      _dio.options.baseUrl = baseUrl;
+    }
+  }
 
   @override
   Future<DetectedItem> classifyOne({
     required String photoPath,
     double? approxWeightKg,
   }) async {
-    final uri = Uri.parse('$baseUrl/classify');
-    final request = http.MultipartRequest('POST', uri)
-      ..files.add(await http.MultipartFile.fromPath('file', photoPath));
-    if (approxWeightKg != null) {
-      request.fields['approx_weight_kg'] = approxWeightKg.toString();
-    }
+    final formData = FormData.fromMap({
+      'file': await MultipartFile.fromFile(
+        photoPath,
+        filename: photoPath.split('/').last,
+      ),
+      if (approxWeightKg != null) 'approx_weight_kg': approxWeightKg,
+    });
 
-    final streamedResponse =
-        await request.send().timeout(const Duration(seconds: 30));
-    final response = await http.Response.fromStream(streamedResponse);
+    final response = await _dio.post(
+      '/classify',
+      data: formData,
+      options: Options(contentType: 'multipart/form-data'),
+    );
 
     if (response.statusCode != 200) {
       throw Exception(
-          'Classifier API returned ${response.statusCode}: ${response.body}');
+          'Classifier API returned ${response.statusCode}: ${response.data}');
     }
 
-    debugPrint('RAW CLASSIFY RESPONSE: ${response.body}');
-
-    final Map<String, dynamic> json =
-        jsonDecode(response.body) as Map<String, dynamic>;
+    final Map<String, dynamic> json = response.data as Map<String, dynamic>;
 
     final Map<String, double>? confidenceScores =
         (json['confidence'] as Map<String, dynamic>?)
