@@ -5,7 +5,9 @@ import '../app_strings.dart';
 import '../models/lot_store.dart';
 import 'create_lot_screen.dart';
 import 'lot_history_screen.dart';
+import 'profile_screen.dart';
 import '../services/api_classifier_service.dart';
+import '../models/collector_store.dart';
 
 class HomeScreen extends StatefulWidget {
   final String currentLanguage;
@@ -71,7 +73,7 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _welcomeCard(lang),
+            _welcomeCard(lang, CollectorStore.getOrCreate().name),
             const SizedBox(height: 20),
             _statsRow(lang, lots.length, totalValue),
             const SizedBox(height: 24),
@@ -82,7 +84,7 @@ class _HomeScreenState extends State<HomeScreen> {
               color: AppColors.primaryGreen,
               onTap: () => _openAndRefresh(CreateLotScreen(
                 classifierService:
-                    ApiClassifierService(baseUrl: 'http://127.0.0.1:8000'),
+                    ApiClassifierService(baseUrl: 'http://192.168.98.41:8000'),
               )),
             ),
             const SizedBox(height: 14),
@@ -93,13 +95,24 @@ class _HomeScreenState extends State<HomeScreen> {
               color: AppColors.primaryYellow,
               onTap: () => _openAndRefresh(const LotHistoryScreen()),
             ),
+            const SizedBox(height: 14),
+            _actionCard(
+              icon: Icons.person,
+              title: 'My Profile',
+              subtitle: 'Language, area, contact & earnings',
+              color: AppColors.primaryGreen,
+              onTap: () => _openAndRefresh(const ProfileScreen()),
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _welcomeCard(String lang) {
+  Widget _welcomeCard(String lang, String name) {
+    final greeting = AppStrings.get(_greetingKey(), lang);
+    final displayGreeting = name.isNotEmpty ? '$greeting, $name!' : greeting;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
@@ -128,7 +141,7 @@ class _HomeScreenState extends State<HomeScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  AppStrings.get(_greetingKey(), lang),
+                  displayGreeting,
                   style: const TextStyle(
                       color: Colors.white,
                       fontSize: 20,

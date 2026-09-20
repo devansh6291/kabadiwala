@@ -2,12 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'app_colors.dart';
 import 'models/lot_store.dart';
+import 'models/collector_store.dart';
 import 'screens/home_screen.dart';
+import 'screens/login_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Hive.initFlutter();
   await LotStore.init();
+  await CollectorStore.init();
   runApp(const MyApp());
 }
 
@@ -20,10 +23,26 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> {
   String currentLanguage = 'en';
+  late bool _onboarded = CollectorStore.isOnboarded();
 
   void changeLanguage(String? newLanguage) {
     if (newLanguage == null) return;
     setState(() => currentLanguage = newLanguage);
+  }
+
+  void _onLoginComplete(String chosenLanguage) {
+    setState(() {
+      currentLanguage = chosenLanguage;
+      _onboarded = true;
+    });
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    if (_onboarded) {
+      currentLanguage = CollectorStore.getOrCreate().preferredLanguage;
+    }
   }
 
   @override
@@ -41,10 +60,12 @@ class _MyAppState extends State<MyApp> {
           secondary: AppColors.primaryYellow,
         ),
       ),
-      home: HomeScreen(
-        currentLanguage: currentLanguage,
-        onLanguageChanged: changeLanguage,
-      ),
+      home: _onboarded
+          ? HomeScreen(
+              currentLanguage: currentLanguage,
+              onLanguageChanged: changeLanguage,
+            )
+          : LoginScreen(onComplete: _onLoginComplete),
     );
   }
 }
