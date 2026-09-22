@@ -1,0 +1,12 @@
+{
+  "seed": 42,
+  "device": "cpu",
+  "demo_mode": true,
+  "p1_rows": 300,
+  "p2_rows": 240,
+  "p1_macro_f1": 1.0,
+  "p2_sub_macro_f1": 1.0,
+  "p3_rmse_inr": 45.79637656306364,
+  "p3_mae_inr": 32.16916463232297,
+  "p3_mape_pct": 10.87821470687083
+}
