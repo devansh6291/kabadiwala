@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -217,6 +218,10 @@ class _LoginScreenState extends State<LoginScreen> {
                   const SizedBox(height: 6),
                   TextFormField(
                     controller: _nameController,
+                    // Letters and spaces only — no digits, no symbols.
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z\s]')),
+                    ],
                     decoration: _fieldDecoration('e.g. Ramesh Kumar'),
                     validator: (v) => (v == null || v.trim().isEmpty)
                         ? 'Name is required'
@@ -229,6 +234,11 @@ class _LoginScreenState extends State<LoginScreen> {
                   TextFormField(
                     controller: _ageController,
                     keyboardType: TextInputType.number,
+                    // Digits only, capped at 3 characters (max realistic age).
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(3),
+                    ],
                     decoration: _fieldDecoration('e.g. 34'),
                     validator: (v) {
                       final age = int.tryParse(v?.trim() ?? '');
@@ -245,6 +255,12 @@ class _LoginScreenState extends State<LoginScreen> {
                     controller: _phoneController,
                     keyboardType: TextInputType.phone,
                     maxLength: 10,
+                    // Digits only — the +91 prefix below is display-only and
+                    // is never part of this controller's text, so this
+                    // maxLength genuinely means 10 real phone digits.
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                    ],
                     decoration:
                         _fieldDecoration('10-digit number (OTP will be sent)')
                             .copyWith(
@@ -361,6 +377,10 @@ class _LoginScreenState extends State<LoginScreen> {
                           keyboardType: TextInputType.number,
                           textAlign: TextAlign.center,
                           maxLength: 6,
+                          // Digits only for the OTP code too.
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                          ],
                           style: const TextStyle(
                               fontSize: 24,
                               letterSpacing: 8,
