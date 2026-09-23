@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "772665361823",
+    "project_id": "kabadiwalaconnect-8c8c4",
+    "storage_bucket": "kabadiwalaconnect-8c8c4.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:772665361823:android:8df1257443dc151fb1e9aa",
+        "android_client_info": {
+          "package_name": "com.example.kabadiwala_connect"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBfvhy2YchvT57yoLsZeW6aj4URouxQY2w"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
