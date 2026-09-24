@@ -1,14 +1,9 @@
 import 'package:flutter/material.dart';
-
 import '../app_colors.dart';
 import '../models/lot.dart';
 import '../services/recycler_matching_services.dart';
 import 'form6_signing_screen.dart';
 
-/// Routes every lot saved from one collection photo and shows all the
-/// outcomes together — some may go straight to a recycler, some may pool,
-/// some may need storage. [hasStorage] was already asked once on the
-/// review screen and applies to every lot here.
 class BatchRoutingSummaryScreen extends StatefulWidget {
   final List<Lot> lots;
   final bool hasStorage;
@@ -22,21 +17,59 @@ class BatchRoutingSummaryScreen extends StatefulWidget {
 }
 
 class _BatchRoutingSummaryScreenState extends State<BatchRoutingSummaryScreen> {
-  late final List<MapEntry<Lot, RoutingResult>> _results = widget.lots
-      .map((lot) => MapEntry(lot,
-          RecyclerMatchingService.route(lot, hasStorage: widget.hasStorage)))
-      .toList();
+  late Future<List<MapEntry<Lot, RoutingResult>>> _resultsFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _resultsFuture = _computeAllRoutes();
+  }
+
+  Future<List<MapEntry<Lot, RoutingResult>>> _computeAllRoutes() async {
+    // Await API resolution for every lot in the batch simultaneously
+    final futures = widget.lots.map((lot) async {
+      final res = await RecyclerMatchingService.route(lot,
+          hasStorage: widget.hasStorage);
+      return MapEntry(lot, res);
+    });
+    return Future.wait(futures);
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(title: const Text('Routing Summary')),
-      body: ListView.separated(
-        padding: const EdgeInsets.all(16),
-        itemCount: _results.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 12),
-        itemBuilder: (context, index) => _resultCard(_results[index]),
+      body: FutureBuilder<List<MapEntry<Lot, RoutingResult>>>(
+        future: _resultsFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(
+                child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 16),
+                Text('Calculating optimal routes...',
+                    style: TextStyle(color: AppColors.textSecondary))
+              ],
+            ));
+          }
+
+          if (snapshot.hasError) {
+            return Center(
+                child: Text('Routing Error: ${snapshot.error}',
+                    style: const TextStyle(color: AppColors.error)));
+          }
+
+          final results = snapshot.data!;
+          return ListView.separated(
+            padding: const EdgeInsets.all(16),
+            itemCount: results.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 12),
+            itemBuilder: (context, index) => _resultCard(results[index]),
+          );
+        },
       ),
     );
   }
@@ -64,7 +97,7 @@ class _BatchRoutingSummaryScreenState extends State<BatchRoutingSummaryScreen> {
         color = AppColors.primaryGreen;
         title = 'Routed directly';
         subtitle =
-            'Meets ${result.recycler!.name}\'s vehicle capacity alone — pickup scheduled directly.';
+            'Meets ${result.recycler!.name}\'s vehicle capacity alone  •  pickup scheduled directly.';
         break;
       case RoutingOutcome.pooling:
         icon = Icons.hourglass_bottom;
@@ -79,7 +112,7 @@ class _BatchRoutingSummaryScreenState extends State<BatchRoutingSummaryScreen> {
         color = AppColors.primaryGreen;
         title = 'Pool ready for pickup';
         subtitle =
-            'Threshold reached for ${result.recycler!.name} — Form-6 handover can begin.';
+            'Threshold reached for ${result.recycler!.name}  •  Form-6 handover can begin.';
         showForm6Button = true;
         break;
       case RoutingOutcome.routedToStorage:
@@ -110,7 +143,7 @@ class _BatchRoutingSummaryScreenState extends State<BatchRoutingSummaryScreen> {
                     children: [
                       Text(
                         lot.subCategory != null
-                            ? '${lot.category} · ${lot.subCategory}'
+                            ? '${lot.category}  •  ${lot.subCategory}'
                             : lot.category,
                         style: const TextStyle(
                             fontWeight: FontWeight.bold, fontSize: 15),

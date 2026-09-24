@@ -1,17 +1,12 @@
 import 'package:flutter/material.dart';
-
 import '../app_colors.dart';
 import '../models/lot.dart';
 import '../services/recycler_matching_services.dart';
 import 'form6_signing_screen.dart';
 import 'terms_conditions_screen.dart';
 
-/// Shows where a lot ended up after routing: straight to a recycler,
-/// pooling toward one, ready for pickup, or held at a storage-only
-/// Kabadiwala until the pool completes (idea doc sections 3.2–3.3).
 class RoutingResultScreen extends StatefulWidget {
   final Lot lot;
-
   const RoutingResultScreen({super.key, required this.lot});
 
   @override
@@ -55,26 +50,25 @@ class _RoutingResultScreenState extends State<RoutingResultScreen> {
       ),
     );
 
-    var result = RecyclerMatchingService.route(widget.lot,
+    // Now uses AWAIT to fetch real backend calculations
+    var result = await RecyclerMatchingService.route(widget.lot,
         hasStorage: hasStorage ?? true);
 
-    // If routed to a storage point, require the custody Terms &
-    // Conditions to be accepted before this is treated as final.
     if (result.outcome == RoutingOutcome.routedToStorage && mounted) {
       final accepted = await Navigator.push<bool>(
         context,
         MaterialPageRoute(
-          builder: (context) =>
-              TermsConditionsScreen(storageProvider: result.storageKabadiwala!),
+          builder: (context) => TermsConditionsScreen(
+              storageProvider: result
+                  .storageKabadiwala!), // Note: Update TermsConditionsScreen parameter typing to StorageHost if you get a compile error here
         ),
       );
 
       if (accepted != true) {
-        // Collector declined custody terms — re-route without storage
-        // so they're at least still pooling, just without a storage
-        // assignment. Flag this in the UI via _declinedStorage.
         _declinedStorage = true;
-        result = RecyclerMatchingService.route(widget.lot, hasStorage: true);
+        setState(() => _result = null); // Show loading spinner again
+        result =
+            await RecyclerMatchingService.route(widget.lot, hasStorage: true);
       }
     }
 
@@ -85,12 +79,20 @@ class _RoutingResultScreenState extends State<RoutingResultScreen> {
   @override
   Widget build(BuildContext context) {
     final result = _result;
-
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(title: const Text('Routing')),
       body: result == null
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(
+              child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 16),
+                Text('Connecting to matching engine...',
+                    style: TextStyle(color: AppColors.textSecondary))
+              ],
+            ))
           : Padding(
               padding: const EdgeInsets.all(20),
               child: _buildResultBody(context, result),
@@ -109,7 +111,6 @@ class _RoutingResultScreenState extends State<RoutingResultScreen> {
               'No recycler currently accepts "${widget.lot.category}" in this area. '
               'The lot is saved and will route automatically once one is available.',
         );
-
       case RoutingOutcome.directDispatch:
         return _statusCard(
           icon: Icons.local_shipping,
@@ -118,15 +119,12 @@ class _RoutingResultScreenState extends State<RoutingResultScreen> {
           subtitle:
               'This lot alone meets ${result.recycler!.name}\'s minimum vehicle '
               'capacity (${result.recycler!.minVehicleCapacityKg.toStringAsFixed(0)} kg). '
-              'Pickup will be scheduled directly — no pooling needed.',
+              'Pickup will be scheduled directly.',
         );
-
       case RoutingOutcome.pooling:
         return _poolingCard(result, ready: false);
-
       case RoutingOutcome.poolReadyForPickup:
         return _poolingCard(result, ready: true);
-
       case RoutingOutcome.routedToStorage:
         return _storageCard(result);
     }
@@ -156,9 +154,9 @@ class _RoutingResultScreenState extends State<RoutingResultScreen> {
           title: ready
               ? 'Pool ready for pickup!'
               : 'Pooling with nearby collectors',
-          subtitle: 'Target: ${result.recycler!.name} · ${pool.category}\n'
+          subtitle: 'Target: ${result.recycler!.name}  •  ${pool.category}\n'
               '${pool.totalWeightKg.toStringAsFixed(1)} / ${pool.thresholdKg.toStringAsFixed(0)} kg collected'
-              '${ready ? '' : ' · ${pool.remainingKg.toStringAsFixed(1)} kg to go'}',
+              '${ready ? '' : '  •  ${pool.remainingKg.toStringAsFixed(1)} kg to go'}',
         ),
         const SizedBox(height: 16),
         ClipRRect(
@@ -204,7 +202,7 @@ class _RoutingResultScreenState extends State<RoutingResultScreen> {
 
   Widget _storageCard(RoutingResult result) {
     final pool = result.pool!;
-    final rate = result.storageKabadiwala!.storageRatePerItemPerWeek ?? 0;
+    final rate = result.storageKabadiwala!.weeklyRatePerItem;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -215,8 +213,7 @@ class _RoutingResultScreenState extends State<RoutingResultScreen> {
           title: 'Routed to storage',
           subtitle:
               '${result.storageKabadiwala!.name} will hold this at ₹${rate.toStringAsFixed(0)}/item/week '
-              'until ${result.recycler!.name}\'s pool reaches ${pool.thresholdKg.toStringAsFixed(0)} kg. '
-              'They only custody it — they don\'t process or resell it.',
+              'until ${result.recycler!.name}\'s pool reaches ${pool.thresholdKg.toStringAsFixed(0)} kg.',
         ),
         const SizedBox(height: 16),
         _statusCard(
@@ -231,12 +228,11 @@ class _RoutingResultScreenState extends State<RoutingResultScreen> {
     );
   }
 
-  Widget _statusCard({
-    required IconData icon,
-    required Color color,
-    required String title,
-    required String subtitle,
-  }) {
+  Widget _statusCard(
+      {required IconData icon,
+      required Color color,
+      required String title,
+      required String subtitle}) {
     return Card(
       elevation: 1,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),

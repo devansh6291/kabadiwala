@@ -1,14 +1,12 @@
 import 'package:flutter/material.dart';
 import '../app_colors.dart';
-import '../models/recycler.dart';
+import '../models/storage_host.dart';
 
 /// Custody/storage agreement shown before a lot is routed to a large
 /// Kabadiwala's storage point (idea doc section 4 — binding custody
-/// undertaking). [storageProvider] must be a Recycler with
-/// isStorageOnly == true.
+/// undertaking).
 class TermsConditionsScreen extends StatefulWidget {
-  final Recycler storageProvider;
-
+  final StorageHost storageProvider;
   const TermsConditionsScreen({super.key, required this.storageProvider});
 
   @override
@@ -20,21 +18,27 @@ class _TermsConditionsScreenState extends State<TermsConditionsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final rate = widget.storageProvider.storageRatePerItemPerWeek ?? 0;
-
+    final rate = widget.storageProvider.weeklyRatePerItem;
     return Scaffold(
+      backgroundColor: AppColors.background,
       appBar: AppBar(title: const Text('Storage Agreement')),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(widget.storageProvider.name,
-                style:
-                    const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-            Text('₹${rate.toStringAsFixed(0)} per item, per week',
-                style: const TextStyle(
-                    fontSize: 16, color: AppColors.primaryGreen)),
+            Text(
+              widget.storageProvider.name,
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '₹${rate.toStringAsFixed(0)} per item, per week',
+              style: const TextStyle(
+                  fontSize: 16,
+                  color: AppColors.primaryGreen,
+                  fontWeight: FontWeight.w600),
+            ),
             const SizedBox(height: 16),
             const Expanded(
               child: SingleChildScrollView(
@@ -50,26 +54,35 @@ class _TermsConditionsScreenState extends State<TermsConditionsScreen> {
               ),
             ),
             CheckboxListTile(
+              contentPadding: EdgeInsets.zero,
               value: accepted,
               onChanged: (v) => setState(() => accepted = v ?? false),
               title: const Text('I have read and agree to these terms'),
               activeColor: AppColors.primaryGreen,
             ),
+            const SizedBox(height: 8),
             SizedBox(
               width: double.infinity,
-              height: 56,
+              height: 54,
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(
                   backgroundColor:
                       accepted ? AppColors.primaryYellow : Colors.grey.shade300,
+                  foregroundColor: Colors.black,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14)),
                 ),
                 onPressed: accepted ? () => Navigator.pop(context, true) : null,
-                child: const Text('Accept & Store Item'),
+                child: const Text('Accept & Store Item',
+                    style:
+                        TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               ),
             ),
             TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child: const Text('Decline'),
+              child: const Center(
+                child: Text('Decline', style: TextStyle(color: Colors.black54)),
+              ),
             ),
           ],
         ),

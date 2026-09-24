@@ -1,25 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
-
 import '../app_colors.dart';
 import '../models/form6_manifest.dart';
 import '../models/lot.dart';
+import '../models/collector_store.dart';
 import '../services/crypto_service.dart';
 import '../services/location_service.dart';
+import '../services/api_client.dart';
 
 enum _Stage { dispatch, transit, delivery, complete }
 
-/// Digitizes the Form-6 manifest and walks through its three sign-off
-/// checkpoints (dispatch → transit → delivery), chaining each stage's
-/// hash into the next — the digital equivalent of the paper form's
-/// three physical signatures (see CryptoService for what "chained" means
-/// here, and its honesty note about hash-chaining vs. encryption).
-///
-/// In production each checkpoint is signed by a different party (the
-/// collector/storage point, the transporter, the recycler) on their own
-/// device. This screen lets all three be signed in sequence for demo/
-/// testing purposes — split it across apps once the transporter and
-/// recycler-side apps exist.
+/// Digitizes the Form-6 manifest and pushes checkpoints to the live MySQL ledger.
 class Form6SigningScreen extends StatefulWidget {
   final Lot lot;
   final String recyclerId;
@@ -34,21 +25,29 @@ class Form6SigningScreen extends StatefulWidget {
 class _Form6SigningScreenState extends State<Form6SigningScreen> {
   final Uuid _uuid = const Uuid();
   final TextEditingController _nameController = TextEditingController();
+
   _Stage _stage = _Stage.dispatch;
   bool _signing = false;
+
   late final Form6Manifest _manifest = Form6Manifest(
     manifestId: _uuid.v4(),
-    senderName: '',
-    senderPhone: '',
+    senderName: CollectorStore.getOrCreate().name,
+    senderPhone: CollectorStore.getOrCreate().phoneNumber,
     materialType: widget.lot.category,
     quantity: widget.lot.approxWeightKg,
     destinationRecyclerId: widget.recyclerId,
   );
 
+  @override
+  void dispose() {
+    _nameController.dispose();
+    super.dispose();
+  }
+
   String get _stageLabel {
     switch (_stage) {
       case _Stage.dispatch:
-        return 'Dispatch (handover from collector/storage point)';
+        return 'Dispatch (handover from collector/storage)';
       case _Stage.transit:
         return 'Transit (received by transporter)';
       case _Stage.delivery:
@@ -68,55 +67,117 @@ class _Form6SigningScreenState extends State<Form6SigningScreen> {
     }
 
     setState(() => _signing = true);
-    final position = await LocationService.getCurrentPosition();
-    final now = DateTime.now();
 
-    // NOTE: a typed name + timestamp stands in for a drawn signature here.
-    // Swap in a signature-pad widget later; only this hash source changes.
-    final signatureHash =
-        CryptoService.hash('$name|${_stage.name}|${now.toIso8601String()}');
-    final previousHash = switch (_stage) {
-      _Stage.dispatch => _manifest.manifestId,
-      _Stage.transit => _manifest.checkpointDispatch!.cumulativeHash,
-      _Stage.delivery => _manifest.checkpointTransit!.cumulativeHash,
-      _Stage.complete => '',
-    };
+    try {
+      final position = await LocationService.getCurrentPosition();
+      final now = DateTime.now();
 
-    final checkpoint = Form6Checkpoint(
-      signatureHash: signatureHash,
-      timestamp: now,
-      latitude: position?.latitude,
-      longitude: position?.longitude,
-      cumulativeHash: CryptoService.chainHash(
-        previousHash: previousHash,
-        stageSignatureHash: signatureHash,
+      final signatureHash =
+          CryptoService.hash('$name|${_stage.name}|${now.toIso8601String()}');
+
+      final previousHash = switch (_stage) {
+        _Stage.dispatch => _manifest.manifestId,
+        _Stage.transit => _manifest.checkpointDispatch!.cumulativeHash,
+        _Stage.delivery => _manifest.checkpointTransit!.cumulativeHash,
+        _Stage.complete => '',
+      };
+
+      final checkpoint = Form6Checkpoint(
+        signatureHash: signatureHash,
         timestamp: now,
         latitude: position?.latitude,
         longitude: position?.longitude,
-      ),
-    );
+        cumulativeHash: CryptoService.chainHash(
+          previousHash: previousHash,
+          stageSignatureHash: signatureHash,
+          timestamp: now,
+          latitude: position?.latitude,
+          longitude: position?.longitude,
+        ),
+      );
 
-    setState(() {
+      // Update Local Object
       switch (_stage) {
         case _Stage.dispatch:
           _manifest.senderName = name;
           _manifest.checkpointDispatch = checkpoint;
-          _stage = _Stage.transit;
           break;
         case _Stage.transit:
           _manifest.checkpointTransit = checkpoint;
-          _stage = _Stage.delivery;
           break;
         case _Stage.delivery:
           _manifest.checkpointDelivery = checkpoint;
-          _stage = _Stage.complete;
           break;
         case _Stage.complete:
           break;
       }
-      _signing = false;
-      _nameController.clear();
-    });
+
+      // Sync to live MySQL Backend
+      await _pushManifestToLedger();
+
+      if (!mounted) return;
+      setState(() {
+        if (_stage == _Stage.dispatch)
+          _stage = _Stage.transit;
+        else if (_stage == _Stage.transit)
+          _stage = _Stage.delivery;
+        else if (_stage == _Stage.delivery) _stage = _Stage.complete;
+
+        _signing = false;
+        _nameController.clear();
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _signing = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to record signature: $e')),
+      );
+    }
+  }
+
+  Future<void> _pushManifestToLedger() async {
+    final payload = {
+      'manifest_id': _manifest.manifestId,
+      'sender_name':
+          _manifest.senderName.isEmpty ? 'Unknown' : _manifest.senderName,
+      'sender_phone': _manifest.senderPhone,
+      'transporter_id': 'pending',
+      'transporter_name': 'Pending Transporter',
+      'material_type': _manifest.materialType,
+      'quantity': _manifest.quantity,
+      'destination_recycler_id': _manifest.destinationRecyclerId,
+      'checkpoint_dispatch': _manifest.checkpointDispatch != null
+          ? {
+              'signature_hash': _manifest.checkpointDispatch!.signatureHash,
+              'cumulative_hash': _manifest.checkpointDispatch!.cumulativeHash,
+              'timestamp':
+                  _manifest.checkpointDispatch!.timestamp.toIso8601String(),
+            }
+          : null,
+      'checkpoint_transit': _manifest.checkpointTransit != null
+          ? {
+              'signature_hash': _manifest.checkpointTransit!.signatureHash,
+              'cumulative_hash': _manifest.checkpointTransit!.cumulativeHash,
+              'timestamp':
+                  _manifest.checkpointTransit!.timestamp.toIso8601String(),
+            }
+          : null,
+      'checkpoint_delivery': _manifest.checkpointDelivery != null
+          ? {
+              'signature_hash': _manifest.checkpointDelivery!.signatureHash,
+              'cumulative_hash': _manifest.checkpointDelivery!.cumulativeHash,
+              'timestamp':
+                  _manifest.checkpointDelivery!.timestamp.toIso8601String(),
+            }
+          : null,
+      'chain_hash': _manifest.chainHash,
+    };
+
+    final response =
+        await ApiClient().dio.post('/manifests/checkpoint', data: payload);
+    if (response.statusCode != 200 && response.statusCode != 201) {
+      throw Exception('Server rejected the signature ledger update.');
+    }
   }
 
   @override
@@ -144,7 +205,7 @@ class _Form6SigningScreenState extends State<Form6SigningScreen> {
                         style: const TextStyle(fontWeight: FontWeight.w600)),
                     const SizedBox(height: 8),
                     Text(
-                        '${_manifest.materialType} · ${_manifest.quantity} kg'),
+                        '${_manifest.materialType}  •  ${_manifest.quantity} kg'),
                   ],
                 ),
               ),
@@ -186,7 +247,8 @@ class _Form6SigningScreenState extends State<Form6SigningScreen> {
                           child: CircularProgressIndicator(
                               strokeWidth: 2, color: Colors.white))
                       : const Icon(Icons.draw),
-                  label: const Text('Sign this checkpoint'),
+                  label: const Text('Sign this checkpoint',
+                      style: TextStyle(fontWeight: FontWeight.bold)),
                 ),
               ),
             ] else
