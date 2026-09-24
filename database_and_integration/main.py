@@ -1,4 +1,7 @@
-from fastapi import FastAPI, Depends, HTTPException, Query
+import tempfile
+from pathlib import Path
+from fastapi import FastAPI, Depends, HTTPException, Query, File, UploadFile, Form
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from typing import List, Optional
@@ -7,16 +10,38 @@ import models
 import schema
 from math import radians, sin, cos, sqrt, asin
 
+# AI Module Imports
+from ai_model.test_inference import build_engine, find_notebook, load_notebook_module
+
 app = FastAPI(title="Kabadiwala E-connect API")
 
-# DATABASE INITIALIZATION
+# ==========================================
+# AI MODEL & MIDDLEWARE INITIALIZATION
+# ==========================================
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Load the model ONCE at startup, not per-request — this is the expensive part.
+_nb = load_notebook_module(find_notebook())
+_engine = build_engine(_nb)
+
+
+# ==========================================
+# 0. DATABASE INITIALIZATION
+# ==========================================
 @app.on_event("startup")
 async def startup():
     async with engine.begin() as conn:
-
         await conn.run_sync(models.Base.metadata.create_all)
 
+
+# ==========================================
 # 1. COLLECTOR (Auth & Profile)
+# ==========================================
 @app.post("/collectors", response_model=schema.CollectorSchema)
 async def create_or_update_collector(collector: schema.CollectorSchema, db: AsyncSession = Depends(get_db)):
     """Handles Collector OTP Login / Registration."""
@@ -53,7 +78,10 @@ async def get_collector(phone_number: str, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Collector not found")
     return collector
 
+
+# ==========================================
 # 2. LOTS (Offline Batch Sync)
+# ==========================================
 @app.post("/lots", response_model=schema.LotSchema)
 async def sync_single_lot(lot: schema.LotSchema, db: AsyncSession = Depends(get_db)):
     """Accepts a single offline-created Lot from Flutter and syncs it."""
@@ -67,7 +95,10 @@ async def sync_single_lot(lot: schema.LotSchema, db: AsyncSession = Depends(get_
         await db.rollback()
         raise HTTPException(status_code=400, detail=f"Sync failed: {str(e)}")
 
+
+# ==========================================
 # 3. RECYCLERS & STORAGE HOSTS
+# ==========================================
 @app.get("/recyclers", response_model=List[schema.RecyclerSchema])
 async def get_recyclers(db: AsyncSession = Depends(get_db)):
     """Fetches all authorized recyclers for proximity matching in Flutter."""
@@ -82,8 +113,10 @@ async def get_storage_hosts(db: AsyncSession = Depends(get_db)):
     result = await db.execute(query)
     return result.scalars().all()
 
+
+# ==========================================
 # 4. POOLING SYSTEM
-# Through this we are creating a new pool
+# ==========================================
 @app.post("/pools", response_model=schema.PoolSchema)
 async def create_pool(pool: schema.PoolSchema, db: AsyncSession = Depends(get_db)):
     try:
@@ -104,7 +137,6 @@ async def create_pool(pool: schema.PoolSchema, db: AsyncSession = Depends(get_db
         await db.rollback()
         raise HTTPException(status_code=400, detail=str(e))
 
-#Through this endpoint we are fetching and reading pools
 @app.get("/pools", response_model=List[schema.PoolSchema])
 async def get_pools(category: Optional[str] = None, recycler_id: Optional[str] = None, db: AsyncSession = Depends(get_db)):
     query = select(models.Pool)
@@ -115,7 +147,26 @@ async def get_pools(category: Optional[str] = None, recycler_id: Optional[str] =
     result = await db.execute(query)
     return result.scalars().all()
 
+@app.post("/pools/{pool_id}/contribute")
+async def contribute_to_pool(pool_id: str, contribution: schema.ContributionSchema, db: AsyncSession = Depends(get_db)):
+    try:
+        new_entry = models.LotPoolEntry(
+            pool_id=pool_id,
+            lot_id=contribution.lot_id,
+            weight_kg=contribution.weight_kg,
+            collector_label=contribution.collector_label
+        )
+        db.add(new_entry)
+        await db.commit()
+        return {"status": "success"}
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# ==========================================
 # 5. TRANSACTIONS & FORM-6 MANIFESTS
+# ==========================================
 @app.post("/transactions", response_model=schema.TransactionSchema)
 async def create_transaction(tx: schema.TransactionSchema, db: AsyncSession = Depends(get_db)):
     try:
@@ -141,7 +192,9 @@ async def create_manifest(manifest: schema.Form6ManifestSchema, db: AsyncSession
         raise HTTPException(status_code=400, detail=str(e))
 
 
+# ==========================================
 # 6. MARKET PRICES & NEWS
+# ==========================================
 @app.get("/prices", response_model=List[schema.PriceDatasetEntrySchema])
 async def get_prices(db: AsyncSession = Depends(get_db)):
     """Provides market trends for scrap prices to the UI."""
@@ -157,7 +210,9 @@ async def get_news(db: AsyncSession = Depends(get_db)):
     return result.scalars().all()
 
 
-# NEARBY RECYCLERS & KABADIWALAS (GEO-QUERY)
+# ==========================================
+# 7. NEARBY RECYCLERS & KABADIWALAS (GEO-QUERY)
+# ==========================================
 @app.get("/recyclers/nearby", response_model=List[schema.RecyclerSchema])
 async def get_nearby_recyclers(
     lat: float = Query(..., description="Collector latitude"),
@@ -183,12 +238,10 @@ async def get_nearby_recyclers(
         
         # Haversine formula calculation in Python (ideal for moderate directory sizes)
         for r in recyclers:
-            # Optional material filter check
             if material and r.materials_accepted:
                 if material not in r.materials_accepted:
                     continue
 
-            # Calculate distance in KM between Collector (lat, lng) and Recycler facility
             lat1, lon1 = radians(lat), radians(lng)
             lat2, lon2 = radians(r.facility_location_lat), radians(r.facility_location_lng)
             
@@ -196,10 +249,8 @@ async def get_nearby_recyclers(
             dlat = lat2 - lat1
             a = sin(dlat / 2)**2 + cos(lat1) * cos(lat2) * sin(dlon / 2)**2
             c = 2 * asin(sqrt(a))
-            # Radius of earth in kilometers is 6371
             distance_km = 6371 * c
 
-            # Check if within the recycler's service area or requested search radius
             effective_radius = max(radius_km, r.service_area_radius_km)
             if distance_km <= effective_radius:
                 nearby_recyclers.append(r)
@@ -242,18 +293,33 @@ async def get_nearby_storage_hosts(
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Storage geo-query failed: {str(e)}")
 
-@app.post("/pools/{pool_id}/contribute")
-async def contribute_to_pool(pool_id: str, contribution: schema.ContributionSchema, db: AsyncSession = Depends(get_db)):
+
+# ==========================================
+# 8. AI CLASSIFICATION & HEALTH
+# ==========================================
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+@app.post("/classify")
+async def classify(file: UploadFile = File(...), approx_weight_kg: Optional[float] = Form(None)):
+    """
+    Accepts one image file (+ optional approx_weight_kg), returns the
+    camelCase dart_ui_state shape the Flutter app's ApiClassifierService
+    expects to parse.
+    """
+    suffix = Path(file.filename or "upload.jpg").suffix or ".jpg"
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+        tmp.write(await file.read())
+        tmp_path = tmp.name
+
     try:
-        new_entry = models.LotPoolEntry(
-            pool_id=pool_id,
-            lot_id=contribution.lot_id,
-            weight_kg=contribution.weight_kg,
-            collector_label=contribution.collector_label
-        )
-        db.add(new_entry)
-        await db.commit()
-        return {"status": "success"}
-    except Exception as e:
-        await db.rollback()
-        raise HTTPException(status_code=400, detail=str(e))
+        result = _engine.predict(tmp_path, approx_weight_kg=approx_weight_kg)
+
+        if "dart_ui_state" in result:
+            return result["dart_ui_state"]
+
+        print(f"[server] WARNING: no 'dart_ui_state' key. Actual keys: {list(result.keys())}")
+        return result
+    finally:
+        Path(tmp_path).unlink(missing_ok=True)
