@@ -17,12 +17,17 @@ testing over USB), the Flutter app calls:
 
 import tempfile
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional, Protocol, cast
 
 from fastapi import FastAPI, File, Form, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
 from test_inference import build_engine, find_notebook, load_notebook_module
+
+
+class InferenceEngine(Protocol):
+    def predict(self, image_path: str, approx_weight_kg: Optional[float] = None) -> Any:
+        ...
 
 app = FastAPI(title="Kabadiwala Connect — Classifier API")
 
@@ -35,7 +40,7 @@ app.add_middleware(
 
 # Load the model ONCE at startup, not per-request — this is the expensive part.
 _nb = load_notebook_module(find_notebook())
-_engine = build_engine(_nb)
+_engine = cast(InferenceEngine, build_engine(_nb))
 
 
 @app.get("/health")

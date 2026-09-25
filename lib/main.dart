@@ -6,6 +6,7 @@ import 'models/collector_store.dart';
 import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
 import 'services/firebase_service.dart';
+import 'services/api_client.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -17,6 +18,11 @@ void main() async {
   await Hive.initFlutter();
   await LotStore.init();
   await CollectorStore.init();
+
+  // TEMPORARY: override for physical-device USB testing via `adb reverse`.
+  // Remove or make this conditional once testing on an emulator or over
+  // real WiFi with a LAN IP instead.
+  ApiClient().updateBaseUrl('http://10.77.222.41:8000');
 
   runApp(const MyApp());
 }
