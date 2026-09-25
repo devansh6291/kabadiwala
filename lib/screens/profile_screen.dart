@@ -156,13 +156,57 @@ class _ProfileScreenState extends State<ProfileScreen> {
             child: SwitchListTile(
               contentPadding: EdgeInsets.zero,
               value: _profile.hasOwnLogistics,
-              activeColor: AppColors.primaryGreen,
-              title: const Text('I also aggregate for other nearby collectors'),
+              activeThumbColor: AppColors.primaryGreen,
+              title: const Text('I have my own vehicle / logistics'),
               subtitle: const Text(
-                  'Turns on pooling routing to you as a local hub',
+                  'Enables direct dispatch routing for large lots',
                   style: TextStyle(fontSize: 12)),
               onChanged: (value) =>
                   setState(() => _profile.hasOwnLogistics = value),
+            ),
+          ),
+          const SizedBox(height: 16),
+          _sectionCard(
+            title: 'Role',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: _profile.isAggregator,
+                  activeThumbColor: AppColors.primaryGreen,
+                  title: const Text('I am an Aggregator'),
+                  subtitle: const Text(
+                      'You pool & hold lots from multiple nearby collectors '
+                      'and dispatch as one large batch to the recycler',
+                      style: TextStyle(fontSize: 12)),
+                  onChanged: (value) =>
+                      setState(() => _profile.isAggregator = value),
+                ),
+                if (_profile.isAggregator) ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: AppColors.primaryGreen.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Row(
+                      children: [
+                        Icon(Icons.verified_user,
+                            size: 16, color: AppColors.primaryGreen),
+                        SizedBox(width: 6),
+                        Text('Aggregator mode active',
+                            style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.primaryGreen)),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
           const SizedBox(height: 24),

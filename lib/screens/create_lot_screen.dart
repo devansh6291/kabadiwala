@@ -44,8 +44,17 @@ class _CreateLotScreenState extends State<CreateLotScreen> {
       setState(() => _items.add(item));
     } catch (e) {
       if (!mounted) return;
+      // Keep the captured image even if an unexpected error occurs
+      final fallbackItem =
+          await ManualClassifierService().classifyOne(photoPath: path);
+      if (!mounted) return;
+      setState(() => _items.add(fallbackItem));
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Classification failed: $e')),
+        const SnackBar(
+          content:
+              Text('Offline mode: item added (you can review & edit details).'),
+          duration: Duration(seconds: 3),
+        ),
       );
     } finally {
       if (mounted) setState(() => _classifying = false);

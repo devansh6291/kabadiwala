@@ -3,7 +3,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'app_colors.dart';
 import 'models/lot_store.dart';
 import 'models/collector_store.dart';
-import 'screens/home_screen.dart';
+import 'screens/main_tab_navigation_screen.dart';
 import 'screens/login_screen.dart';
 import 'services/firebase_service.dart';
 import 'services/api_client.dart';
@@ -75,7 +75,7 @@ class _MyAppState extends State<MyApp> {
         ),
       ),
       home: _onboarded
-          ? HomeScreen(
+          ? MainTabNavigationScreen(
               currentLanguage: currentLanguage,
               onLanguageChanged: changeLanguage,
             )

@@ -102,6 +102,10 @@ class _HomeScreenState extends State<HomeScreen> {
             _welcomeCard(lang, CollectorStore.getOrCreate().name),
             const SizedBox(height: 20),
             _statsRow(lang, lots.length, totalValue),
+            if (CollectorStore.getOrCreate().isAggregator) ...[
+              const SizedBox(height: 16),
+              _aggregatorBanner(),
+            ],
             const SizedBox(height: 24),
             _actionCard(
               icon: Icons.add_a_photo,
@@ -130,6 +134,42 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _aggregatorBanner() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppColors.primaryYellow.withValues(alpha: 0.18),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+            color: AppColors.primaryYellow.withValues(alpha: 0.5), width: 1.2),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.hub, color: AppColors.primaryYellow, size: 26),
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Aggregator Mode',
+                    style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                        color: AppColors.primaryYellow)),
+                SizedBox(height: 2),
+                Text(
+                    'You are pooling for nearby collectors. '
+                    'Route lots from Lot History → Sign Form-6 when ready.',
+                    style: TextStyle(fontSize: 12, color: Colors.black54)),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

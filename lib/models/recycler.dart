@@ -79,10 +79,11 @@ class Recycler {
               0.0) as num)
           .toDouble(),
       hasOwnLogistics: (json['has_own_logistics'] ??
-          json['hasOwnLogistics'] ??
-          false) as bool,
+              json['hasOwnLogistics'] ??
+              false) ==
+          true,
       isStorageOnly:
-          (json['is_storage_only'] ?? json['isStorageOnly'] ?? false) as bool,
+          (json['is_storage_only'] ?? json['isStorageOnly'] ?? false) == true,
       storageRatePerItemPerWeek: (json['storage_rate_per_item_week'] ??
               json['storageRatePerItemPerWeek'] as num?)
           ?.toDouble(),

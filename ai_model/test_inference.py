@@ -17,6 +17,7 @@ matplotlib.use("Agg")  # non-interactive backend — no popup windows, ever
 
 import ast
 import json
+import sys
 import types
 from pathlib import Path
 
@@ -51,12 +52,18 @@ def load_notebook_module(nb_path: Path) -> types.ModuleType:
 
     module = types.ModuleType("model_notebook")
     module.__file__ = str(nb_path)
+    # Required in Python 3.14 for dataclass introspection to resolve types
+    sys.modules[module.__name__] = module
 
     code_cells = [c for c in nb.get("cells", []) if c.get("cell_type") == "code"]
     print(f"[model] imported {len(code_cells)} definition cell(s) from {nb_path.name}")
 
     ok_count = fail_count = 0
     for idx, cell in enumerate(code_cells):
+        # Skip evaluation and visualization cells (Cell 6) for inference server
+        if idx >= 6:
+            continue
+
         source = _strip_magics("".join(cell.get("source", [])))
         if not source.strip():
             continue
@@ -68,7 +75,47 @@ def load_notebook_module(nb_path: Path) -> types.ModuleType:
             continue
 
         for node in tree.body:
-            stmt_src = ast.get_source_segment(source, node) or ""
+            stmt_src = (ast.get_source_segment(source, node) or "").strip()
+
+            # Skip probe prints and evaluation calls that slow down loading
+            if stmt_src.startswith(("_probe =", "_probe2 =", "y1_true, y1_pred =", "p2_eval =")):
+                continue
+
+            # Fast-path: load pre-trained P1 checkpoint instead of retraining
+            if stmt_src.startswith("p1_model ="):
+                p1_ckpt = getattr(module, "P1_CKPT", None)
+                if p1_ckpt and Path(p1_ckpt).exists() and hasattr(module, "BinaryEwasteNet"):
+                    try:
+                        print(f"[model] Loading pre-trained P1 checkpoint from {p1_ckpt}")
+                        import torch
+                        net = module.BinaryEwasteNet().to(module.DEVICE)
+                        ckpt = torch.load(p1_ckpt, map_location=module.DEVICE)
+                        net.load_state_dict(ckpt["state_dict"])
+                        module.p1_model = net.eval()
+                        ok_count += 1
+                        continue
+                    except Exception as e:
+                        print(f"[model] P1 checkpoint load fallback: {e}")
+
+            # Fast-path: load pre-trained P2 checkpoint instead of retraining
+            if stmt_src.startswith("p2_model ="):
+                p2_ckpt = getattr(module, "P2_CKPT", None)
+                if p2_ckpt and Path(p2_ckpt).exists() and hasattr(module, "MultiTaskEwasteNet"):
+                    try:
+                        print(f"[model] Loading pre-trained P2 checkpoint from {p2_ckpt}")
+                        import torch
+                        n_sub = len(module.CANONICAL_SUBCATEGORIES)
+                        n_comp = len(module.COMPONENT_KEYS)
+                        n_metal = len(module.METAL_KEYS)
+                        net = module.MultiTaskEwasteNet(n_sub=n_sub, n_comp=n_comp, n_metal=n_metal).to(module.DEVICE)
+                        ckpt = torch.load(p2_ckpt, map_location=module.DEVICE)
+                        net.load_state_dict(ckpt["state_dict"])
+                        module.p2_model = net.eval()
+                        ok_count += 1
+                        continue
+                    except Exception as e:
+                        print(f"[model] P2 checkpoint load fallback: {e}")
+
             try:
                 code = compile(
                     ast.Module(body=[node], type_ignores=[]),

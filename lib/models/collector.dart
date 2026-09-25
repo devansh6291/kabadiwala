@@ -13,6 +13,10 @@ class CollectorProfile {
   double? longitude;
   bool isOnboarded;
 
+  /// True when this device is acting as an aggregator / large Kabadiwala
+  /// hub that pools lots on behalf of nearby smaller collectors.
+  bool isAggregator;
+
   CollectorProfile({
     required this.collectorId,
     required this.phoneNumber,
@@ -26,6 +30,7 @@ class CollectorProfile {
     this.latitude,
     this.longitude,
     this.isOnboarded = false,
+    this.isAggregator = false,
   }) : transactionHistoryIds = transactionHistoryIds ?? [];
 
   Map<String, dynamic> toJson() => {
@@ -41,6 +46,7 @@ class CollectorProfile {
         'latitude': latitude,
         'longitude': longitude,
         'is_onboarded': isOnboarded,
+        'is_aggregator': isAggregator,
       };
 
   factory CollectorProfile.fromJson(Map<String, dynamic> json) =>
@@ -64,12 +70,14 @@ class CollectorProfile {
         totalEarnings:
             ((json['total_earnings'] ?? json['totalEarnings'] ?? 0.0) as num)
                 .toDouble(),
-        hasOwnLogistics: (json['has_own_logistics'] ??
-            json['hasOwnLogistics'] ??
-            false) as bool,
+        hasOwnLogistics:
+            (json['has_own_logistics'] ?? json['hasOwnLogistics'] ?? false) ==
+                true,
         latitude: (json['latitude'] as num?)?.toDouble(),
         longitude: (json['longitude'] as num?)?.toDouble(),
         isOnboarded:
-            (json['is_onboarded'] ?? json['isOnboarded'] ?? false) as bool,
+            (json['is_onboarded'] ?? json['isOnboarded'] ?? false) == true,
+        isAggregator:
+            (json['is_aggregator'] ?? json['isAggregator'] ?? false) == true,
       );
 }
