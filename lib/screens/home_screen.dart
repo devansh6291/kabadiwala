@@ -4,7 +4,6 @@ import '../app_colors.dart';
 import '../app_strings.dart';
 import '../models/lot_store.dart';
 import '../models/collector_store.dart';
-import '../services/api_client.dart';
 import '../services/api_classifier_service.dart';
 import '../services/sync_service.dart';
 import 'create_lot_screen.dart';
@@ -110,8 +109,7 @@ class _HomeScreenState extends State<HomeScreen> {
               subtitle: AppStrings.get('newCollectionSub', lang),
               color: AppColors.primaryGreen,
               onTap: () => _openAndRefresh(CreateLotScreen(
-                classifierService:
-                    ApiClassifierService(baseUrl: ApiClient.defaultBaseUrl),
+                classifierService: ApiClassifierService(),
               )),
             ),
             const SizedBox(height: 14),
