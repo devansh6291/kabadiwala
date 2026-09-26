@@ -9,8 +9,6 @@ from database import get_db, engine
 import models
 import schema
 from math import radians, sin, cos, sqrt, asin
-
-# AI Module Imports
 from ai_model.test_inference import build_engine, find_notebook, load_notebook_module
 
 app = FastAPI(title="Kabadiwala E-connect API")
