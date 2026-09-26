@@ -1,4 +1,5 @@
 import tempfile
+import json
 from pathlib import Path
 from fastapi import FastAPI, Depends, HTTPException, Query, File, UploadFile, Form
 from fastapi.middleware.cors import CORSMiddleware
@@ -101,11 +102,19 @@ async def sync_single_lot(lot: schema.LotSchema, db: AsyncSession = Depends(get_
 # 3. RECYCLERS & STORAGE HOSTS
 # ==========================================
 @app.get("/recyclers", response_model=List[schema.RecyclerSchema])
-async def get_recyclers(db: AsyncSession = Depends(get_db)):
-    """Fetches all authorized recyclers for proximity matching in Flutter."""
+async def get_recyclers(category: Optional[str] = Query(None), db: AsyncSession = Depends(get_db)):
+    """Fetches all authorized recyclers for proximity matching in Flutter, optionally filtered by category."""
     query = select(models.Recycler).where(models.Recycler.authorization_status == "authorized")
     result = await db.execute(query)
-    return result.scalars().all()
+    recyclers = result.scalars().all()
+    
+    if category:
+        filtered = []
+        for r in recyclers:
+            if r.materials_accepted and category in r.materials_accepted:
+                filtered.append(r)
+        return filtered
+    return recyclers
 
 @app.get("/storage-hosts", response_model=List[schema.StorageHostSchema])
 async def get_storage_hosts(db: AsyncSession = Depends(get_db)):
