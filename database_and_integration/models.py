@@ -1,5 +1,5 @@
 from sqlalchemy import Column, String, CHAR, Float, Boolean, DateTime, JSON, ForeignKey, Integer
-from sqlalchemy.orm import declarative_base
+from sqlalchemy.orm import declarative_base, relationship
 import uuid
 from datetime import datetime, timezone
 
@@ -20,6 +20,7 @@ class Lot(Base):
     longitude = Column(Float, nullable=True)
     sync_status = Column(String(50), default="pending")
     recycler_id = Column(CHAR(36), ForeignKey("recyclers.recycler_id"), nullable=True)
+    collector_id = Column(CHAR(36), nullable=True)
 
 class Collector(Base):
     __tablename__ = "collectors"
@@ -94,7 +95,7 @@ class Transaction(Base):
     transaction_status = Column(String(50), default="created")
     collection_location_lat = Column(Float, nullable=True)
     collection_location_lng = Column(Float, nullable=True)
-    handover_location_lat = Column(Float, nullable=True) 
+    handover_location_lat = Column(Float, nullable=True)
     handover_location_lng = Column(Float, nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     closed_at = Column(DateTime, nullable=True)

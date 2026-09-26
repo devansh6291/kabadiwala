@@ -2,9 +2,6 @@ from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 
-# ==========================================
-# 1. LOT 
-# ==========================================
 class LotSchema(BaseModel):
     id: str = Field(..., alias="lot_id")
     category: str
@@ -22,9 +19,6 @@ class LotSchema(BaseModel):
     collector_id: Optional[str] = Field(None, alias="collectorId")
     model_config = ConfigDict(populate_by_name=True, from_attributes=True, serialize_by_alias=True, extra="allow")
 
-# ==========================================
-# 2. COLLECTOR
-# ==========================================
 class CollectorSchema(BaseModel):
     collector_id: str = Field(..., alias="collectorId")
     name: str = ""
@@ -40,9 +34,6 @@ class CollectorSchema(BaseModel):
     transaction_history_ids: Optional[List[str]] = Field(default_factory=list, alias="transactionHistoryIds")
     model_config = ConfigDict(populate_by_name=True, from_attributes=True, serialize_by_alias=True, extra="allow")
 
-# ==========================================
-# 3. RECYCLER
-# ==========================================
 class RecyclerSchema(BaseModel):
     recycler_id: str = Field(..., alias="recyclerId")
     name: str
@@ -59,12 +50,8 @@ class RecyclerSchema(BaseModel):
     min_vehicle_capacity_kg: float = Field(0.0, alias="minVehicleCapacityKg")
     is_storage_only: bool = Field(False, alias="isStorageOnly")
     storage_rate_per_item_week: Optional[float] = Field(None, alias="storageRatePerItemWeek")
-    
     model_config = ConfigDict(populate_by_name=True, from_attributes=True, serialize_by_alias=True, extra="allow")
 
-# ==========================================
-# 4. STORAGE HOST
-# ==========================================
 class StorageHostSchema(BaseModel):
     host_id: str = Field(..., alias="hostId")
     name: str
@@ -75,9 +62,6 @@ class StorageHostSchema(BaseModel):
     rating: float = 0.0
     model_config = ConfigDict(populate_by_name=True, from_attributes=True, serialize_by_alias=True, extra="allow")
 
-# ==========================================
-# 5. POOL & ENTRIES
-# ==========================================
 class LotPoolEntrySchema(BaseModel):
     lot_id: str = Field(..., alias="lotId")
     collector_label: str = Field(..., alias="collectorLabel")
@@ -96,9 +80,6 @@ class PoolSchema(BaseModel):
     created_at: datetime = Field(..., alias="createdAt")
     model_config = ConfigDict(populate_by_name=True, from_attributes=True, serialize_by_alias=True, extra="allow")
 
-# ==========================================
-# 6. TRANSACTIONS & MANIFESTS
-# ==========================================
 class TransactionSchema(BaseModel):
     transaction_id: str = Field(..., alias="transactionId")
     lot_id: str = Field(..., alias="lotId")
@@ -119,21 +100,22 @@ class Form6ManifestSchema(BaseModel):
     material_type: str = Field(..., alias="materialType")
     quantity: float
     destination_recycler_id: str = Field(..., alias="destinationRecyclerId")
+    checkpoint_dispatch: Optional[dict] = Field(None, alias="checkpointDispatch")
+    checkpoint_transit: Optional[dict] = Field(None, alias="checkpointTransit")
+    checkpoint_delivery: Optional[dict] = Field(None, alias="checkpointDelivery")
+    chain_hash: Optional[str] = Field(None, alias="chainHash")
     model_config = ConfigDict(populate_by_name=True, from_attributes=True, serialize_by_alias=True, extra="allow")
 
-# ==========================================
-# 7. PRICE DATASET & NEWS
-# ==========================================
 class PriceDatasetEntrySchema(BaseModel):
     id: Optional[str] = None
     material_category: str = Field(..., alias="materialCategory")
-    material_sub_category: Optional[str] = Field(None, alias="materialSubCategory", default=None)
+    material_sub_category: Optional[str] = Field(None, alias="materialSubCategory")
     location: str
     date: datetime
     buying_price: float = Field(..., alias="buyingPrice")
     selling_price: float = Field(..., alias="sellingPrice")
     unit: str = "per_kg"
-    recycler_id: Optional[str] = Field(None, alias="recyclerId", default=None)
+    recycler_id: Optional[str] = Field(None, alias="recyclerId")
     model_config = ConfigDict(populate_by_name=True, from_attributes=True, serialize_by_alias=True, extra="allow")
 
 class NewsItemSchema(BaseModel):
@@ -148,5 +130,5 @@ class NewsItemSchema(BaseModel):
 class ContributionSchema(BaseModel):
     lot_id: str = Field(..., alias="lotId")
     weight_kg: float = Field(..., alias="weightKg")
-    collector_label: str = Field(..., alias="collectorLabel", default="You")
+    collector_label: str = Field("You", alias="collectorLabel")
     model_config = ConfigDict(populate_by_name=True, from_attributes=True, serialize_by_alias=True, extra="allow")
