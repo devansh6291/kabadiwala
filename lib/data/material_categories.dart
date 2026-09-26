@@ -17,7 +17,7 @@ class MaterialCategoryData {
 
 /// Single source of truth for category choices shown in the UI.
 /// Keep `label` values identical to what the data dictionary expects
-/// for `Lot.category` — the backend and any ML classifier match on
+/// for `Lot.category` — the backend and the ML classifier match on
 /// these exact strings.
 class MaterialCategories {
   static const List<MaterialCategoryData> all = [
@@ -54,6 +54,19 @@ class MaterialCategories {
     MaterialCategoryData(
       label: 'MixedPlastics',
       icon: Icons.local_drink,
+    ),
+    MaterialCategoryData(
+      label: 'OtherEwaste',
+      icon: Icons.devices_other,
+      // Matches the model's CANONICAL_SUBCATEGORIES that fall under
+      // OtherEwaste rather than a more specific category.
+      subCategories: [
+        'Laptop',
+        'Keyboard',
+        'Mouse',
+        'MobilePhone',
+        'ScrapMetal'
+      ],
     ),
   ];
 
