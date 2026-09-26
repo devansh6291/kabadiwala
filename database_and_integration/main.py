@@ -9,6 +9,9 @@ from database import get_db, engine
 import models
 import schema
 from math import radians, sin, cos, sqrt, asin
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from ai_model.test_inference import build_engine, find_notebook, load_notebook_module
 
 app = FastAPI(title="Kabadiwala E-connect API")
@@ -200,31 +203,43 @@ async def get_prices(db: AsyncSession = Depends(get_db)):
     result = await db.execute(query)
     return result.scalars().all()
 
-@app.get("/news", response_model=List[schema.NewsItemSchema])
+@app.get("/news")
 async def get_news(db: AsyncSession = Depends(get_db)):
-    """Provides industry news updates to the UI."""
+    """Provides industry news updates to the UI with Fat JSON."""
     query = select(models.NewsItem).order_by(models.NewsItem.date.desc())
     result = await db.execute(query)
-    return result.scalars().all()
+    news_records = result.scalars().all()
+    
+    formatted_news = []
+    for article in news_records:
+        formatted_news.append({
+            "id": article.id,
+            "title": article.title,
+            "headline": article.title,  # Duplicate for Flutter
+            "source": article.source,
+            "date": str(article.date),
+            "published_at": str(article.date), # Duplicate for Flutter
+            "snippet": article.snippet,
+            "body": article.snippet, # Duplicate for Flutter
+            "url": article.url
+        })
+    return formatted_news
 
 
 # ==========================================
 # 7. NEARBY RECYCLERS & KABADIWALAS (GEO-QUERY)
 # ==========================================
-@app.get("/recyclers/nearby", response_model=List[schema.RecyclerSchema])
+@app.get("/recyclers/nearby")
 async def get_nearby_recyclers(
-    lat: float = Query(..., description="Collector latitude"),
-    lng: float = Query(..., description="Collector longitude"),
-    radius_km: float = Query(15.0, description="Search radius in kilometers"),
-    material: Optional[str] = Query(None, description="Filter by accepted material category"),
+    lat: float = Query(...),
+    lng: float = Query(...),
+    radius_km: float = Query(50.0),
+    material: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    Finds authorized recyclers within the given radius or whose service area covers the collector,
-    optionally filtered by the scrap material category.
-    """
+    print(f"\n[DEBUG] App requested Material: '{material}' at Lat: {lat}, Lng: {lng}")
     try:
-        # Fetch all authorized, non-storage recyclers from MySQL
+        # Fetch from MySQL
         query = select(models.Recycler).where(
             models.Recycler.authorization_status == "authorized",
             models.Recycler.is_storage_only == False
@@ -232,31 +247,98 @@ async def get_nearby_recyclers(
         result = await db.execute(query)
         recyclers = result.scalars().all()
 
-        nearby_recyclers = []
-        
-        # Haversine formula calculation in Python (ideal for moderate directory sizes)
+        print(f"[DEBUG] MySQL found {len(recyclers)} authorized recyclers in the database.")
+
+        nearby_with_distance = []
         for r in recyclers:
-            if material and r.materials_accepted:
-                if material not in r.materials_accepted:
+            print(f" -> Checking Recycler: ID {r.recycler_id}")
+            
+            # Safe JSON parsing
+            accepted = r.materials_accepted or []
+            if isinstance(accepted, str):
+                try:
+                    accepted = json.loads(accepted)
+                except:
+                    accepted = [m.strip() for m in accepted.split(",")]
+            
+            print(f"    They accept: {accepted}")
+
+            if material and accepted:
+                if not any(material.lower() == m.lower() for m in accepted):
+                    print("    [X] REJECTED: Material doesn't match")
                     continue
 
+            # Location Math
+            r_lat = r.facility_location_lat or 0.0
+            r_lng = r.facility_location_lng or 0.0
             lat1, lon1 = radians(lat), radians(lng)
-            lat2, lon2 = radians(r.facility_location_lat), radians(r.facility_location_lng)
-            
+            lat2, lon2 = radians(r_lat), radians(r_lng)
+
             dlon = lon2 - lon1
             dlat = lat2 - lat1
             a = sin(dlat / 2)**2 + cos(lat1) * cos(lat2) * sin(dlon / 2)**2
             c = 2 * asin(sqrt(a))
             distance_km = 6371 * c
+            
+            print(f"    Calculated Distance: {distance_km:.2f} km")
 
-            effective_radius = max(radius_km, r.service_area_radius_km)
+            effective_radius = max(radius_km, (r.service_area_radius_km or 0.0))
             if distance_km <= effective_radius:
-                nearby_recyclers.append(r)
+                print("    [✓] ACCEPTED: Within radius!")
+                nearby_with_distance.append((distance_km, r))
+            else:
+                print("    [X] REJECTED: Too far away")
 
-        return nearby_recyclers
+        nearby_with_distance.sort(key=lambda item: item[0])
+        
+        # Build the flexible "Fat JSON" to bypass Flutter's strict parsing
+        formatted_results = []
+        for dist, r in nearby_with_distance:
+            
+            # Parse materials again for final output
+            mats = r.materials_accepted
+            if isinstance(mats, str):
+                try:
+                    mats = json.loads(mats)
+                except:
+                    mats = [m.strip() for m in mats.split(",")]
+                    
+            # Parse rates for final output
+            rates = r.offered_rates
+            if isinstance(rates, str):
+                try:
+                    rates = json.loads(rates)
+                except:
+                    rates = {}
+
+            recycler_name = getattr(r, "name", getattr(r, "company_name", "Unknown"))
+
+            formatted_results.append({
+                "recycler_id": r.recycler_id,
+                
+                # Duplicate name keys
+                "name": recycler_name,
+                "company_name": recycler_name,
+                
+                # Duplicate location keys
+                "facility_lat": float(r.facility_location_lat or 0.0),
+                "facility_lng": float(r.facility_location_lng or 0.0),
+                "facility_location_lat": float(r.facility_location_lat or 0.0),
+                "facility_location_lng": float(r.facility_location_lng or 0.0),
+                
+                "materials_accepted": mats,
+                "authorization_number": getattr(r, "authorization_number", ""),
+                "authorization_status": getattr(r, "authorization_status", ""),
+                "contact_details": getattr(r, "contact_details", ""),
+                "offered_rates": rates,
+                "distance_km": round(dist, 2)
+            })
+
+        return formatted_results
+
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Geo-query failed: {str(e)}")
-
+        print(f"[ERROR] {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
 
 @app.get("/storage-hosts/nearby", response_model=List[schema.StorageHostSchema])
 async def get_nearby_storage_hosts(

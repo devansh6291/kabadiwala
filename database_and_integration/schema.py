@@ -36,24 +36,31 @@ class CollectorSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 # 3. RECYCLER (Flutter sends snake_case)
+from pydantic import BaseModel, Field, ConfigDict
+from typing import Optional, List, Dict, Any
+from datetime import datetime
+
+# ... [Keep your other schemas at the top exactly the same] ...
+
 class RecyclerSchema(BaseModel):
-    recycler_id: str
-    name: str
-    facility_location_lat: float = Field(alias="facility_lat")
-    facility_location_lng: float = Field(alias="facility_lng")
-    materials_accepted: List[str]
+    recycler_id: Optional[str] = None
+    name: Optional[str] = None
+    facility_location_lat: Optional[float] = Field(None, alias="facility_lat")
+    facility_location_lng: Optional[float] = Field(None, alias="facility_lng")
+    materials_accepted: Any = None  # Changed to Any to prevent JSON parsing crashes
     authorization_number: Optional[str] = None
-    authorization_status: str = "pending"
-    contact_details: str
-    offered_rates: Optional[Dict[str, float]] = None
-    pickup_availability: str
-    service_area_radius_km: float = 15.0 
-    has_own_logistics: bool = False
-    min_vehicle_capacity_kg: float = 0.0
-    is_storage_only: bool = False
+    authorization_status: Optional[str] = "pending"
+    contact_details: Optional[str] = None
+    offered_rates: Any = None       # Changed to Any
+    pickup_availability: Optional[str] = None
+    service_area_radius_km: Optional[float] = 15.0 
+    has_own_logistics: Optional[bool] = False
+    min_vehicle_capacity_kg: Optional[float] = 0.0
+    is_storage_only: Optional[bool] = False
     storage_rate_per_item_week: Optional[float] = None
     
-    model_config = ConfigDict(populate_by_name=True, from_attributes=True)
+    # MAGIC LINE: extra="allow" lets us pass duplicate keys to Flutter without Pydantic deleting them
+    model_config = ConfigDict(populate_by_name=True, from_attributes=True, extra="allow")
 
 # 4. STORAGE HOST
 class StorageHostSchema(BaseModel):
@@ -133,12 +140,14 @@ class PriceDatasetEntrySchema(BaseModel):
 
 class NewsItemSchema(BaseModel):
     id: Optional[str] = None
-    title: str
-    source: str
-    date: datetime
-    snippet: str
+    title: Optional[str] = None
+    source: Optional[str] = None
+    date: Optional[datetime] = None
+    snippet: Optional[str] = None
     url: Optional[str] = None
-    model_config = ConfigDict(from_attributes=True)
+    
+    # MAGIC LINE: extra="allow"
+    model_config = ConfigDict(from_attributes=True, extra="allow")
 
 class ContributionSchema(BaseModel):
     lot_id: str
