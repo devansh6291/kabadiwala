@@ -1,5 +1,5 @@
 import inspect
-from test_inference import find_notebook, load_notebook_module
+from ai_model.test_inference import find_notebook, load_notebook_module
 
 nb = load_notebook_module(find_notebook())
 
