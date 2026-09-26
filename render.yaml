@@ -1,0 +1,53 @@
+services:
+  - type: pserv
+    name: kabadiwala-mysql
+    runtime: docker
+    plan: starter
+    region: singapore
+    dockerfilePath: ./deployment/mysql/Dockerfile
+    disk:
+      name: kabadiwala-mysql-data
+      mountPath: /var/lib/mysql
+      sizeGB: 10
+    envVars:
+      - key: MYSQL_DATABASE
+        value: kabadiwala_db
+      - key: MYSQL_USER
+        value: kabadiwala_app
+      - key: MYSQL_PASSWORD
+        generateValue: true
+      - key: MYSQL_ROOT_PASSWORD
+        generateValue: true
+
+  - type: web
+    name: kabadiwala-api
+    runtime: python
+    plan: standard
+    region: singapore
+    buildCommand: pip install -r database_and_integration/requirements.txt --index-url https://pypi.org/simple && pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+    startCommand: cd database_and_integration && uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: KABADIWALA_DB_HOST
+        fromService:
+          type: pserv
+          name: kabadiwala-mysql
+          property: host
+      - key: KABADIWALA_DB_PORT
+        value: "3306"
+      - key: KABADIWALA_DB_NAME
+        value: kabadiwala_db
+      - key: KABADIWALA_DB_USER
+        fromService:
+          type: pserv
+          name: kabadiwala-mysql
+          envVarKey: MYSQL_USER
+      - key: KABADIWALA_DB_PASSWORD
+        fromService:
+          type: pserv
+          name: kabadiwala-mysql
+          envVarKey: MYSQL_PASSWORD
+      - key: CORS_ALLOW_ORIGINS
+        value: https://kabadiwalaconnect-8c8c4.web.app
