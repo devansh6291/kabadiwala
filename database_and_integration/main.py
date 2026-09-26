@@ -77,25 +77,101 @@ async def sync_single_lot(lot: schema.LotSchema, db: AsyncSession = Depends(get_
         await db.rollback()
         raise HTTPException(status_code=400, detail=f"Sync failed: {str(e)}")
 
-@app.get("/recyclers", response_model=List[schema.RecyclerSchema])
+@app.get("/recyclers")
 async def get_recyclers(category: Optional[str] = Query(None), db: AsyncSession = Depends(get_db)):
-    query = select(models.Recycler).where(models.Recycler.authorization_status == "authorized")
-    result = await db.execute(query)
-    recyclers = result.scalars().all()
-    
-    if category:
-        filtered = []
+    """Fetches all authorized recyclers with manual JSON formatting to prevent Pydantic validation crashes."""
+    try:
+        query = select(models.Recycler).where(models.Recycler.authorization_status == "authorized")
+        result = await db.execute(query)
+        recyclers = result.scalars().all()
+        
+        print(f"\n[DEBUG] /recyclers found {len(recyclers)} rows in MySQL.")
+        
+        formatted = []
         for r in recyclers:
-            if r.materials_accepted and category in r.materials_accepted:
-                filtered.append(r)
-        return filtered
-    return recyclers
+            # Safe JSON parsing for materials_accepted
+            mats = r.materials_accepted or []
+            if isinstance(mats, str):
+                try:
+                    mats = json.loads(mats)
+                except:
+                    mats = [m.strip() for m in mats.split(",")]
+            
+            # Safe JSON parsing for offered_rates
+            rates = r.offered_rates or {}
+            if isinstance(rates, str):
+                try:
+                    rates = json.loads(rates)
+                except:
+                    rates = {}
 
-@app.get("/storage-hosts", response_model=List[schema.StorageHostSchema])
+            if category:
+                if mats and not any(category.lower() == m.lower() for m in mats):
+                    continue
+
+            formatted.append({
+                "recycler_id": r.recycler_id,
+                "recyclerId": r.recycler_id,
+                "name": r.name,
+                "company_name": r.name,
+                "facility_location_lat": float(r.facility_location_lat or 0.0),
+                "facility_location_lng": float(r.facility_location_lng or 0.0),
+                "facilityLat": float(r.facility_location_lat or 0.0),
+                "facilityLng": float(r.facility_location_lng or 0.0),
+                "materials_accepted": mats,
+                "materialsAccepted": mats,
+                "authorization_number": r.authorization_number or "",
+                "authorizationNumber": r.authorization_number or "",
+                "authorization_status": r.authorization_status or "authorized",
+                "authorizationStatus": r.authorization_status or "authorized",
+                "contact_details": r.contact_details or "",
+                "contactDetails": r.contact_details or "",
+                "offered_rates": rates,
+                "offeredRates": rates,
+                "pickup_availability": r.pickup_availability or "Immediate",
+                "pickupAvailability": r.pickup_availability or "Immediate",
+                "service_area_radius_km": float(r.service_area_radius_km or 15.0),
+                "serviceAreaRadiusKm": float(r.service_area_radius_km or 15.0),
+                "has_own_logistics": bool(r.has_own_logistics),
+                "hasOwnLogistics": bool(r.has_own_logistics),
+                "min_vehicle_capacity_kg": float(r.min_vehicle_capacity_kg or 0.0),
+                "minVehicleCapacityKg": float(r.min_vehicle_capacity_kg or 0.0),
+                "is_storage_only": bool(r.is_storage_only),
+                "isStorageOnly": bool(r.is_storage_only),
+                "storage_rate_per_item_week": float(r.storage_rate_per_item_week or 0.0) if hasattr(r, 'storage_rate_per_item_week') and r.storage_rate_per_item_week else 0.0,
+                "storageRatePerItemWeek": float(r.storage_rate_per_item_week or 0.0) if hasattr(r, 'storage_rate_per_item_week') and r.storage_rate_per_item_week else 0.0,
+            })
+        return formatted
+    except Exception as e:
+        print(f"[ERROR in /recyclers]: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
+    
+@app.get("/storage-hosts")
 async def get_storage_hosts(db: AsyncSession = Depends(get_db)):
-    query = select(models.StorageHost)
-    result = await db.execute(query)
-    return result.scalars().all()
+    """Fetches large Kabadiwalas offering custody storage with safe manual formatting."""
+    try:
+        query = select(models.StorageHost)
+        result = await db.execute(query)
+        hosts = result.scalars().all()
+        
+        formatted = []
+        for h in hosts:
+            formatted.append({
+                "host_id": h.host_id,
+                "hostId": h.host_id,
+                "name": h.name,
+                "latitude": float(h.latitude or 0.0),
+                "longitude": float(h.longitude or 0.0),
+                "weekly_rate_per_item": float(h.weekly_rate_per_item or 0.0),
+                "weeklyRatePerItem": float(h.weekly_rate_per_item or 0.0),
+                "available_capacity": int(h.available_capacity or 0),
+                "availableCapacity": int(h.available_capacity or 0),
+                "rating": float(h.rating or 0.0),
+            })
+        return formatted
+    except Exception as e:
+        print(f"[ERROR in /storage-hosts]: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
 
 @app.post("/pools", response_model=schema.PoolSchema)
 async def create_pool(pool: schema.PoolSchema, db: AsyncSession = Depends(get_db)):
@@ -303,7 +379,7 @@ async def get_nearby_recyclers(
 async def get_nearby_storage_hosts(
     lat: float = Query(..., description="Collector latitude"),
     lng: float = Query(..., description="Collector longitude"),
-    radius_km: float = Query(20.0, description="Search radius in kilometers"),
+    radius_km: float = Query(15.0, description="Search radius in kilometers"),
     db: AsyncSession = Depends(get_db)
 ):
     try:
