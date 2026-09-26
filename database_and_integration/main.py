@@ -15,8 +15,6 @@ import sys
 import os
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from ai_model.test_inference import build_engine, find_notebook, load_notebook_module
-
 app = FastAPI(title="Kabadiwala E-connect API")
 
 app.add_middleware(
@@ -30,8 +28,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-_nb = load_notebook_module(find_notebook())
-_engine = build_engine(_nb)
+if os.getenv("DISABLE_ML", "false").lower() == "true":
+    # Small free-tier instances can't reliably hold the PyTorch models.
+    _engine = None
+else:
+    from ai_model.test_inference import build_engine, find_notebook, load_notebook_module
+
+    _nb = load_notebook_module(find_notebook())
+    _engine = build_engine(_nb)
 
 @app.on_event("startup")
 async def startup():
@@ -432,6 +436,11 @@ def health():
 
 @app.post("/classify")
 async def classify(file: UploadFile = File(...), approx_weight_kg: Optional[float] = Form(None)):
+    if _engine is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Image classification is disabled on this free-tier deployment.",
+        )
     suffix = Path(file.filename or "upload.jpg").suffix or ".jpg"
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
         tmp.write(await file.read())

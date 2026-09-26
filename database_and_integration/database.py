@@ -1,15 +1,30 @@
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
-from sqlalchemy.engine import URL
 from typing import AsyncGenerator
 import os
 
-# Keep credentials out of source control. Set KABADIWALA_DATABASE_URL in the
-# environment, for example:
-# mysql+aiomysql://user:password@localhost:3306/kabadiwala_db
-DATABASE_URL = os.getenv("KABADIWALA_DATABASE_URL")
-if not DATABASE_URL:
-    # Component variables avoid URL-encoding issues with special characters
-    # in the password.
+from sqlalchemy.engine import URL, make_url
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
+
+# Use KABADIWALA_DATABASE_URL/DATABASE_URL for hosted databases. The component
+# variables remain available for the existing local MySQL setup.
+database_url = os.getenv("KABADIWALA_DATABASE_URL") or os.getenv("DATABASE_URL")
+connect_args = {}
+
+if database_url:
+    parsed_url = make_url(database_url)
+    if parsed_url.drivername in {"postgres", "postgresql"}:
+        # Supabase supplies a PostgreSQL URI; Render's free service needs the
+        # IPv4 shared session pooler and asyncpg as its SQLAlchemy driver.
+        query = dict(parsed_url.query)
+        sslmode = query.pop("sslmode", None)
+        if parsed_url.drivername == "postgres":
+            parsed_url = parsed_url.set(drivername="postgresql")
+        database_url = parsed_url.set(
+            drivername="postgresql+asyncpg", query=query
+        )
+        if sslmode:
+            connect_args["ssl"] = "require" if sslmode == "require" else sslmode
+else:
     db_password = os.getenv("KABADIWALA_DB_PASSWORD")
     if not db_password:
         raise RuntimeError(
@@ -17,7 +32,7 @@ if not DATABASE_URL:
             "or KABADIWALA_DB_PASSWORD (and optionally KABADIWALA_DB_USER, "
             "KABADIWALA_DB_HOST, KABADIWALA_DB_PORT, KABADIWALA_DB_NAME)."
         )
-    DATABASE_URL = URL.create(
+    database_url = URL.create(
         "mysql+aiomysql",
         username=os.getenv("KABADIWALA_DB_USER", "root"),
         password=db_password,
@@ -26,19 +41,19 @@ if not DATABASE_URL:
         database=os.getenv("KABADIWALA_DB_NAME", "kabadiwala_db"),
     )
 
-engine = create_async_engine(
-    DATABASE_URL,
-    echo=True,
-    pool_size=5,
-    max_overflow=10
-)
+engine_args = {"echo": True, "pool_size": 5, "max_overflow": 10}
+if connect_args:
+    engine_args["connect_args"] = connect_args
+
+engine = create_async_engine(database_url, **engine_args)
 
 AsyncSessionLocal = async_sessionmaker(
     bind=engine,
     class_=AsyncSession,
     expire_on_commit=False,
-    autoflush=False
+    autoflush=False,
 )
+
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     async with AsyncSessionLocal() as session:

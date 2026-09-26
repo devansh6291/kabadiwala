@@ -1,27 +1,53 @@
 # Deployment
 
-The Flutter web app is configured for Firebase Hosting. The API and MySQL are
-defined as a Render Blueprint in `render.yaml`.
+The Flutter web app is configured for Firebase Hosting. The default
+`render.yaml` targets a $0 hobby deployment using Render's free API service and
+a free Supabase PostgreSQL database. A prior paid Render + MySQL design is no
+longer the default.
 
-## Render
+## Free backend setup
 
-1. Push this repository to GitHub and create a Render Blueprint from it.
-2. Review the Blueprint before applying it. It creates an API service, a
-   private MySQL service, and a 10 GB persistent MySQL disk.
-3. Wait for both services to deploy. Render generates separate MySQL passwords
-   and wires them to the API as environment variables.
-4. Copy the API service's HTTPS URL for the Flutter build below.
+1. Create a free Supabase project. In its **Connect** panel, select the
+   **Session pooler** connection string for IPv4 and copy the PostgreSQL URI.
+2. Push this repository to GitHub, then create a Render Blueprint using
+   `render.yaml`. Supply the Supabase URI when Render prompts for
+   `KABADIWALA_DATABASE_URL`.
+3. Wait for the API service to deploy, then copy its HTTPS URL.
+4. Supabase runs the app's SQLAlchemy schema creation on startup. Import any
+   local records you want hosted separately; local records are not copied.
 
-The API uses a 2 GB service because it loads the image-classification models.
-Render currently lists that service size at $25/month. The MySQL service uses a
-512 MB plan listed at $7/month, plus $0.25/GB/month for its 10 GB persistent
-disk (about $2.50/month). This is about $34.50/month before bandwidth or other
-usage. Confirm current prices in Render before applying the Blueprint.
+Free-tier limits apply: Render spins its free web service down after 15 minutes
+without traffic (the next request may take about a minute to wake it), and
+Supabase's free database may pause after a week without activity and has a
+500 MB database limit. The Render free configuration disables image
+classification because the model's memory needs are not a reliable fit for the
+free service. [Render free limits](https://render.com/docs/free) ·
+[Supabase free limits](https://supabase.com/pricing)
+
+### Demo sign-in with Firebase test numbers
+
+The login screen currently expects an Indian mobile number: it adds `+91` to
+the 10 digits entered in the app. For a demo, configure a Firebase test number
+so Firebase returns a fixed code without sending an SMS:
+
+1. In Firebase Console, open **Authentication → Sign-in method** and enable
+   **Phone**.
+2. In **Phone numbers for testing**, add a fictional test number in `+91`
+   format and choose a six-digit test code. Do not use a real person's number.
+3. In the app, enter the same number's 10 digits (without `+91`), then enter
+   the fixed code you configured.
+
+Only numbers configured in that list can use the fixed demo code. Keep the
+number and code private, and remove them when the demo ends. Real phone
+verification uses SMS and may require a billing account. [Firebase phone-auth
+testing](https://firebase.google.com/docs/auth/flutter/phone-auth) ·
+[Firebase billing and phone-auth requirements](https://firebase.google.com/docs/auth/faq-and-troubleshooting)
 
 ## Firebase Hosting
 
 From the repository root, build the web app with the deployed API URL and then
-deploy the static output:
+deploy the static output. Firebase Hosting has a no-cost Spark option within
+its published quotas.
 
 ```powershell
 flutter build web --dart-define=API_BASE_URL=https://YOUR-API.onrender.com
@@ -58,6 +84,6 @@ steps for [Android](https://docs.flutter.dev/deployment/android),
 
 ## Database data
 
-The Render MySQL service starts empty. Import only the records you want
-available in the hosted app after the database is running; local database
-credentials and data are not copied by the Blueprint.
+The hosted database starts empty. Import only the records you want available
+in the hosted app after the database is running; local database credentials
+and data are not copied by the Blueprint.
