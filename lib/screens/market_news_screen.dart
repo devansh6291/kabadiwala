@@ -14,6 +14,27 @@ class MarketNewsScreen extends StatefulWidget {
 class _MarketNewsScreenState extends State<MarketNewsScreen> {
   late Future<List<Map<String, dynamic>>> _newsFuture;
 
+  static const List<Map<String, dynamic>> _sampleNews = [
+    {
+      'title': 'Sample update: Keep batteries separate from mixed e-waste',
+      'snippet': 'Store damaged or used batteries separately and take them to an appropriate collection point. This is sample guidance, not a current news report.',
+      'source': 'Demo content',
+      'isDemo': true,
+    },
+    {
+      'title': 'Sample update: Check recycler authorization before drop-off',
+      'snippet': 'Ask the recycler what materials they accept and verify required authorizations before handing over regulated waste. This is sample guidance, not a current news report.',
+      'source': 'Demo content',
+      'isDemo': true,
+    },
+    {
+      'title': 'Sample update: Sort paper, metals, and plastics separately',
+      'snippet': 'Clean sorting can make collection and recycling easier. Confirm local collection rules because accepted materials vary by location. This is sample guidance, not a current news report.',
+      'source': 'Demo content',
+      'isDemo': true,
+    },
+  ];
+
   @override
   void initState() {
     super.initState();
@@ -23,10 +44,11 @@ class _MarketNewsScreenState extends State<MarketNewsScreen> {
   Future<List<Map<String, dynamic>>> _fetchNews() async {
     try {
       final response = await ApiClient().dio.get('/news');
-      return List<Map<String, dynamic>>.from(response.data);
+      final items = List<Map<String, dynamic>>.from(response.data);
+      return items.isEmpty ? _sampleNews : items;
     } catch (e) {
       debugPrint('[NEWS API ERROR] $e');
-      throw Exception('Failed to load market news.');
+      return _sampleNews;
     }
   }
 
@@ -103,12 +125,22 @@ class _MarketNewsScreenState extends State<MarketNewsScreen> {
                                 fontSize: 13, color: Colors.black87)),
                         const SizedBox(height: 8),
                         Text(
-                          '${item['source'] ?? 'Kabadiwala Connect'}  •  ${dateFormat.format(date)}',
+                          item['isDemo'] == true
+                              ? 'Demo content • not current news'
+                              : '${item['source'] ?? 'Kabadiwala Connect'}  •  ${dateFormat.format(date)}',
                           style: const TextStyle(
                               fontSize: 11,
                               color: Colors.black45,
                               fontStyle: FontStyle.italic),
                         ),
+                        if (item['url'] != null && item['isDemo'] != true) ...[
+                          const SizedBox(height: 6),
+                          SelectableText(
+                            item['url'].toString(),
+                            style: const TextStyle(
+                                fontSize: 11, color: AppColors.primaryGreen),
+                          ),
+                        ],
                       ],
                     ),
                   ),

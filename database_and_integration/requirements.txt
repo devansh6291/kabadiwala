@@ -1,0 +1,17 @@
+fastapi
+uvicorn[standard]
+python-multipart
+sqlalchemy[asyncio]
+aiomysql
+httpx
+numpy
+pandas
+matplotlib
+pillow
+scikit-learn
+scikit-image
+opencv-python-headless
+pyyaml
+joblib
+torch
+torchvision

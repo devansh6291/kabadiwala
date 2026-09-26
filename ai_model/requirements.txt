@@ -1,5 +1,6 @@
 fastapi
 uvicorn[standard]
+httpx
 python-multipart
 opencv-python
 torch

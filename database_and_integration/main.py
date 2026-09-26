@@ -9,6 +9,7 @@ from typing import List, Optional
 from database import get_db, engine
 import models
 import schema
+from external_apis import get_live_metal_benchmarks, get_live_news, get_nearby_recycling_points
 from math import radians, sin, cos, sqrt, asin
 import sys
 import os
@@ -20,7 +21,11 @@ app = FastAPI(title="Kabadiwala E-connect API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        origin.strip()
+        for origin in os.getenv("CORS_ALLOW_ORIGINS", "*").split(",")
+        if origin.strip()
+    ],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -32,6 +37,12 @@ _engine = build_engine(_nb)
 async def startup():
     async with engine.begin() as conn:
         await conn.run_sync(models.Base.metadata.create_all)
+
+@app.on_event("shutdown")
+async def shutdown():
+    # Dispose the async connection pool on normal shutdown and when Uvicorn
+    # has to abort startup (for example, because the configured port is busy).
+    await engine.dispose()
 
 @app.post("/collectors", response_model=schema.CollectorSchema)
 async def create_or_update_collector(collector: schema.CollectorSchema, db: AsyncSession = Depends(get_db)):
@@ -109,6 +120,12 @@ async def get_recyclers(category: Optional[str] = Query(None), db: AsyncSession 
                 if mats and not any(category.lower() == m.lower() for m in mats):
                     continue
 
+            permit_source_url = None
+            permit_valid_until = None
+            if r.authorization_number == "AWE-55589":
+                permit_source_url = "https://www.mppcb.mp.gov.in/proc/Unique-Eco-Recycle-CCA-Renewal.pdf"
+                permit_valid_until = "2027-07-31"
+
             formatted.append({
                 "recycler_id": r.recycler_id,
                 "recyclerId": r.recycler_id,
@@ -124,6 +141,9 @@ async def get_recyclers(category: Optional[str] = Query(None), db: AsyncSession 
                 "authorizationNumber": r.authorization_number or "",
                 "authorization_status": r.authorization_status or "authorized",
                 "authorizationStatus": r.authorization_status or "authorized",
+                "authorizationSource": "Madhya Pradesh Pollution Control Board permit" if permit_source_url else None,
+                "authorizationSourceUrl": permit_source_url,
+                "authorizationValidUntil": permit_valid_until,
                 "contact_details": r.contact_details or "",
                 "contactDetails": r.contact_details or "",
                 "offered_rates": rates,
@@ -263,32 +283,34 @@ async def create_manifest(manifest: schema.Form6ManifestSchema, db: AsyncSession
         await db.rollback()
         raise HTTPException(status_code=400, detail=str(e))
 
-@app.get("/prices", response_model=List[schema.PriceDatasetEntrySchema])
-async def get_prices(db: AsyncSession = Depends(get_db)):
-    query = select(models.PriceDatasetEntry).order_by(models.PriceDatasetEntry.date.desc())
-    result = await db.execute(query)
-    return result.scalars().all()
+@app.get("/prices")
+async def get_prices():
+    """Live global raw-metal benchmarks; these are not local scrap offers."""
+    try:
+        return await get_live_metal_benchmarks()
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Live metal-price provider unavailable: {str(e)}")
 
 @app.get("/news")
-async def get_news(db: AsyncSession = Depends(get_db)):
-    query = select(models.NewsItem).order_by(models.NewsItem.date.desc())
-    result = await db.execute(query)
-    news_records = result.scalars().all()
-    
-    formatted_news = []
-    for article in news_records:
-        formatted_news.append({
-            "id": article.id,
-            "title": article.title,
-            "headline": article.title,
-            "source": article.source,
-            "date": str(article.date),
-            "published_at": str(article.date),
-            "snippet": article.snippet,
-            "body": article.snippet,
-            "url": article.url
-        })
-    return formatted_news
+async def get_news():
+    """Recent India-focused recycling coverage from the live GDELT API."""
+    try:
+        return await get_live_news()
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Live news provider unavailable: {str(e)}")
+
+
+@app.get("/recycling-points/nearby")
+async def get_nearby_recycling_points_route(
+    lat: float = Query(..., ge=-90, le=90),
+    lng: float = Query(..., ge=-180, le=180),
+    radius_km: float = Query(20.0, gt=0, le=50),
+):
+    """Nearby OpenStreetMap recycling listings; authorization is not verified."""
+    try:
+        return await get_nearby_recycling_points(lat, lng, radius_km)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"OpenStreetMap lookup failed: {str(e)}")
 
 @app.get("/recyclers/nearby")
 async def get_nearby_recyclers(

@@ -55,7 +55,7 @@ class _MainTabNavigationScreenState extends State<MainTabNavigationScreen> {
           NavigationDestination(
               icon: Icon(Icons.groups_outlined),
               selectedIcon: Icon(Icons.groups),
-              label: 'Nearby'),
+              label: 'Recycling Points'),
           NavigationDestination(
               icon: Icon(Icons.currency_rupee),
               selectedIcon: Icon(Icons.currency_rupee),

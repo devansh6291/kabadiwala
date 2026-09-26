@@ -17,6 +17,7 @@ matplotlib.use("Agg")  # non-interactive backend — no popup windows, ever
 
 import ast
 import json
+import os
 import sys
 import types
 from pathlib import Path
@@ -48,6 +49,13 @@ def load_notebook_module(nb_path: Path) -> types.ModuleType:
     same cell from being created.
     """
     nb_path = Path(nb_path)
+    # Notebook cells historically resolve both of these paths from the
+    # process working directory. Uvicorn is commonly started from
+    # database_and_integration, so provide stable defaults based on the
+    # notebook location while still allowing explicit user overrides.
+    notebook_dir = nb_path.resolve().parent
+    os.environ.setdefault("KC_PIPELINE_DIR", str(notebook_dir))
+    os.environ.setdefault("KC_WORK_DIR", str(notebook_dir / "kabadiwala_work"))
     nb = json.loads(nb_path.read_text(encoding="utf-8"))
 
     module = types.ModuleType("model_notebook")
@@ -78,7 +86,10 @@ def load_notebook_module(nb_path: Path) -> types.ModuleType:
             stmt_src = (ast.get_source_segment(source, node) or "").strip()
 
             # Skip probe prints and evaluation calls that slow down loading
-            if stmt_src.startswith(("_probe =", "_probe2 =", "y1_true, y1_pred =", "p2_eval =")):
+            if stmt_src.startswith((
+                "_probe =", "_probe2 =", "y1_true, y1_pred =", "p2_eval =",
+                "if not _probe.empty:", "if not _probe2.empty:",
+            )):
                 continue
 
             # Fast-path: load pre-trained P1 checkpoint instead of retraining

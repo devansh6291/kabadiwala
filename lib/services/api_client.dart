@@ -19,6 +19,8 @@ class ApiClient {
   /// - USB reverse maps to 127.0.0.1:8000
   /// - Emulator maps to 10.0.2.2:8000
   static String get defaultBaseUrl {
+    const configuredBaseUrl = String.fromEnvironment('API_BASE_URL');
+    if (configuredBaseUrl.isNotEmpty) return configuredBaseUrl;
     if (kIsWeb) return 'http://127.0.0.1:8000';
     if (Platform.isAndroid) return 'http://10.77.222.41:8000';
     return 'http://127.0.0.1:8000';

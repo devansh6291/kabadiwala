@@ -5,6 +5,9 @@ class Recycler {
   final double facilityLng;
   final List<String> materialsAccepted;
   final String? authorizationNumber;
+  final String? authorizationSource;
+  final String? authorizationSourceUrl;
+  final String? authorizationValidUntil;
   final String authorizationStatus; // "authorized" / "pending" / "unauthorized"
   final String contactDetails;
   final Map<String, double> offeredRates; // category -> ₹/kg
@@ -28,6 +31,9 @@ class Recycler {
     required this.facilityLng,
     required this.materialsAccepted,
     this.authorizationNumber,
+    this.authorizationSource,
+    this.authorizationSourceUrl,
+    this.authorizationValidUntil,
     required this.authorizationStatus,
     required this.contactDetails,
     required this.offeredRates,
@@ -63,6 +69,9 @@ class Recycler {
       materialsAccepted: materials,
       authorizationNumber:
           json['authorization_number'] ?? json['authorizationNumber'],
+      authorizationSource: json['authorizationSource']?.toString(),
+      authorizationSourceUrl: json['authorizationSourceUrl']?.toString(),
+      authorizationValidUntil: json['authorizationValidUntil']?.toString(),
       authorizationStatus: (json['authorization_status'] ??
               json['authorizationStatus'] ??
               'authorized')
@@ -97,6 +106,9 @@ class Recycler {
         'facility_lng': facilityLng,
         'materials_accepted': materialsAccepted,
         'authorization_number': authorizationNumber,
+        'authorization_source': authorizationSource,
+        'authorization_source_url': authorizationSourceUrl,
+        'authorization_valid_until': authorizationValidUntil,
         'authorization_status': authorizationStatus,
         'contact_details': contactDetails,
         'offered_rates': offeredRates,

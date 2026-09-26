@@ -128,6 +128,19 @@ class _RecyclerDataScreenState extends State<RecyclerDataScreen> {
                       ))
                   .toList(),
             ),
+            if (r.authorizationNumber != null) ...[
+              const SizedBox(height: 8),
+              Text('Authorization: ${r.authorizationNumber}',
+                  style: const TextStyle(fontSize: 12)),
+            ],
+            if (r.authorizationValidUntil != null)
+              Text('Permit valid until ${r.authorizationValidUntil}',
+                  style: const TextStyle(fontSize: 12, color: Colors.black54)),
+            if (r.authorizationSourceUrl != null)
+              SelectableText(
+                '${r.authorizationSource ?? 'Permit source'}: ${r.authorizationSourceUrl}',
+                style: const TextStyle(fontSize: 11, color: Colors.blueGrey),
+              ),
             const SizedBox(height: 8),
             if (r.offeredRates.isNotEmpty)
               Text(

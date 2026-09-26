@@ -1,13 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
-import 'package:geolocator/geolocator.dart';
 import '../app_colors.dart';
-import '../models/storage_host.dart';
 import '../services/api_client.dart';
 import '../services/location_service.dart';
 
-/// Nearby large-Kabadiwala storage points. Fetched via geo-query
-/// from the live backend using the collector's actual GPS.
+/// Nearby mapped recycling businesses. OpenStreetMap listings are not
+/// authorization-verified recycler records.
 class NearbyKabadiwalasScreen extends StatefulWidget {
   const NearbyKabadiwalasScreen({super.key});
 
@@ -17,10 +15,34 @@ class NearbyKabadiwalasScreen extends StatefulWidget {
 }
 
 class _NearbyKabadiwalasScreenState extends State<NearbyKabadiwalasScreen> {
-  Position? _myPosition;
   bool _isLoading = true;
   String? _error;
-  List<StorageHost> _hosts = [];
+  bool _showingSamples = false;
+  List<Map<String, dynamic>> _places = [];
+
+  static const List<Map<String, dynamic>> _samplePlaces = [
+    {
+      'name': 'Sample Recycler 1',
+      'type': 'E-waste collection',
+      'materials': 'Phones, cables, small electronics',
+      'address': 'Example listing — location not verified',
+      'isDemo': true,
+    },
+    {
+      'name': 'Sample Recycler 2',
+      'type': 'Scrap dealer',
+      'materials': 'Paper, cardboard, plastic',
+      'address': 'Example listing — location not verified',
+      'isDemo': true,
+    },
+    {
+      'name': 'Sample Recycler 3',
+      'type': 'Metal recycler',
+      'materials': 'Aluminium, copper, steel',
+      'address': 'Example listing — location not verified',
+      'isDemo': true,
+    },
+  ];
 
   @override
   void initState() {
@@ -41,16 +63,16 @@ class _NearbyKabadiwalasScreenState extends State<NearbyKabadiwalasScreen> {
 
       if (pos == null) {
         setState(() {
-          _error = 'Location access is required to find nearby storage points.';
+          _places = _samplePlaces;
+          _showingSamples = true;
           _isLoading = false;
         });
         return;
       }
-      _myPosition = pos;
-
-      // 2. Query the FastAPI backend for hosts within 20km
+      // The backend sends rounded coordinates to OpenStreetMap, not the
+      // device's exact GPS location.
       final response = await ApiClient().dio.get(
-        '/storage-hosts/nearby',
+        '/recycling-points/nearby',
         queryParameters: {
           'lat': pos.latitude,
           'lng': pos.longitude,
@@ -58,53 +80,36 @@ class _NearbyKabadiwalasScreenState extends State<NearbyKabadiwalasScreen> {
         },
       );
 
-      // 3. Parse JSON response into StorageHost objects safely
+      // These are map listings, not authorization-verified recycler records.
       final List<dynamic> data = response.data;
-      final hosts = data.map((json) {
-        return StorageHost(
-          hostId: json['host_id']?.toString() ?? '',
-          name: json['name']?.toString() ?? '',
-          latitude: (json['latitude'] as num?)?.toDouble() ?? 0.0,
-          longitude: (json['longitude'] as num?)?.toDouble() ?? 0.0,
-          weeklyRatePerItem:
-              (json['weekly_rate_per_item'] as num?)?.toDouble() ?? 0.0,
-          availableCapacity: (json['available_capacity'] as num?)?.toInt() ?? 0,
-          rating: (json['rating'] as num?)?.toDouble() ?? 0.0,
-        );
-      }).toList();
-
-      // 4. Sort strictly by physical distance
-      hosts.sort((a, b) => _distanceKm(a).compareTo(_distanceKm(b)));
+      final places = data.map((item) => Map<String, dynamic>.from(item)).toList();
+      places.sort((a, b) =>
+          ((a['distance_km'] as num?)?.toDouble() ?? 999)
+              .compareTo((b['distance_km'] as num?)?.toDouble() ?? 999));
 
       if (!mounted) return;
       setState(() {
-        _hosts = hosts;
+        _places = places.isEmpty ? _samplePlaces : places;
+        _showingSamples = places.isEmpty;
         _isLoading = false;
       });
     } on DioException catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = 'Failed to connect to the server: ${e.message}';
+        _places = _samplePlaces;
+        _showingSamples = true;
+        _error = null;
         _isLoading = false;
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = 'An unexpected error occurred.';
+        _places = _samplePlaces;
+        _showingSamples = true;
+        _error = null;
         _isLoading = false;
       });
     }
-  }
-
-  double _distanceKm(StorageHost r) {
-    if (_myPosition == null) return 999.0;
-    final meters = Geolocator.distanceBetween(
-      _myPosition!.latitude,
-      _myPosition!.longitude,
-      r.latitude,
-      r.longitude,
-    );
-    return meters / 1000;
   }
 
   @override
@@ -112,7 +117,7 @@ class _NearbyKabadiwalasScreenState extends State<NearbyKabadiwalasScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text('Nearby Kabadiwalas'),
+        title: const Text('Nearby recycling points'),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -157,10 +162,10 @@ class _NearbyKabadiwalasScreenState extends State<NearbyKabadiwalasScreen> {
       );
     }
 
-    if (_hosts.isEmpty) {
+    if (_places.isEmpty) {
       return const Center(
         child: Text(
-          'No storage points registered within 20km.',
+          'No recycling points mapped within 20km.',
           style: TextStyle(color: AppColors.textSecondary),
         ),
       );
@@ -170,34 +175,50 @@ class _NearbyKabadiwalasScreenState extends State<NearbyKabadiwalasScreen> {
       onRefresh: _fetchNearbyHosts,
       child: ListView.separated(
         padding: const EdgeInsets.all(16),
-        itemCount: _hosts.length,
+        itemCount: _places.length + 1,
         separatorBuilder: (_, __) => const SizedBox(height: 12),
-        itemBuilder: (context, index) => _kabadiwalaCard(_hosts[index]),
+        itemBuilder: (context, index) => index == 0
+            ? Text(
+                _showingSamples
+                    ? 'Sample directory entries are shown because live nearby data is unavailable. These are examples, not real people or verified locations.'
+                    : 'Map-listed recycling locations near you. Authorization is not verified; check a provider before handing over waste.',
+                style: TextStyle(color: AppColors.textSecondary),
+              )
+            : _recyclingPointCard(_places[index - 1]),
       ),
     );
   }
 
-  Widget _kabadiwalaCard(StorageHost r) {
-    final distance = _distanceKm(r);
-
+  Widget _recyclingPointCard(Map<String, dynamic> place) {
+    final distance = (place['distance_km'] as num?)?.toDouble() ?? 0.0;
+    final address = place['address']?.toString() ?? '';
     return Card(
       elevation: 1,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: ListTile(
         leading: const CircleAvatar(
           backgroundColor: AppColors.primaryGreen,
-          child: Icon(Icons.warehouse, color: Colors.white),
+          child: Icon(Icons.recycling, color: Colors.white),
         ),
-        title:
-            Text(r.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: Text(
-          'Available Capacity: ${r.availableCapacity} items\n'
-          'Storage Rate: ₹${r.weeklyRatePerItem.toStringAsFixed(0)} / week',
-          style: const TextStyle(fontSize: 12),
+        title: Text(place['name']?.toString() ?? 'Recycling point',
+            style: const TextStyle(fontWeight: FontWeight.bold)),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('${place['type'] ?? 'recycling'} • ${place['materials'] ?? 'Materials not listed'}'),
+            if (address.isNotEmpty) Text(address),
+            Text(
+              place['isDemo'] == true
+                  ? 'Demo only • not a real listing'
+                  : 'OpenStreetMap listing • authorization not verified',
+              style: const TextStyle(fontSize: 11, color: Colors.black54),
+            ),
+          ],
         ),
-        isThreeLine: true,
         trailing: Text(
-          '${distance.toStringAsFixed(1)} km',
+          place['isDemo'] == true
+              ? 'Sample'
+              : '${distance.toStringAsFixed(1)} km',
           style: const TextStyle(
               fontWeight: FontWeight.bold, color: AppColors.primaryGreen),
         ),
