@@ -59,6 +59,10 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
+        leading: Padding(
+          padding: const EdgeInsets.all(7),
+          child: Image.asset('assets/branding/kabadiwala_logo_mark.png'),
+        ),
         title: Text(AppStrings.get('appTitle', lang)),
         actions: [
           IconButton(
@@ -198,7 +202,12 @@ class _HomeScreenState extends State<HomeScreen> {
               color: Colors.white24,
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.recycling, color: Colors.white, size: 28),
+            child: ClipOval(
+              child: Image.asset(
+                'assets/branding/kabadiwala_logo_mark.png',
+                fit: BoxFit.cover,
+              ),
+            ),
           ),
           const SizedBox(width: 14),
           Expanded(

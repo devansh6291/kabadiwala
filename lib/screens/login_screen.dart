@@ -196,9 +196,12 @@ class _LoginScreenState extends State<LoginScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const SizedBox(height: 20),
-                const Icon(Icons.recycling,
-                    color: AppColors.primaryGreen, size: 56),
-                const SizedBox(height: 12),
+                Image.asset(
+                  'assets/branding/kabadiwala_logo_full.png',
+                  height: 190,
+                  fit: BoxFit.contain,
+                ),
+                const SizedBox(height: 8),
                 const Text(
                   'Welcome to Kabadiwala Connect',
                   textAlign: TextAlign.center,

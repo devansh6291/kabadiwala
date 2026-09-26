@@ -6,7 +6,7 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
 
     <application
-        android:label="kabadiwala_connect"
+        android:label="Kabadiwala Connect"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:usesCleartextTraffic="true">

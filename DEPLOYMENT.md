@@ -33,6 +33,29 @@ Firebase Hosting site uses a different origin or a custom domain, update that
 environment variable in Render to include the exact browser origin(s),
 comma-separated.
 
+## Android and other platforms
+
+Builds that call the hosted API must use its HTTPS URL with
+`--dart-define=API_BASE_URL=...`.
+
+- **Android private install:** `flutter build apk --release`. The current
+  Android release configuration uses the debug signing key, so this is for
+  private testing only and is not suitable for Google Play.
+- **Google Play:** set a permanent, unique Android application ID, register
+  that ID in Firebase, create and securely store an upload keystore, configure
+  release signing, and build with `flutter build appbundle`. The current ID is
+  still `com.example.kabadiwala_connect`.
+- **iOS and macOS:** build and sign on macOS with Xcode and the corresponding
+  Apple Developer account.
+- **Windows and Linux:** build on the matching operating system; each platform
+  uses its own installer or package format.
+
+Flutter's official platform deployment guides cover the build and signing
+steps for [Android](https://docs.flutter.dev/deployment/android),
+[iOS](https://docs.flutter.dev/deployment/ios),
+[web](https://docs.flutter.dev/deployment/web), and
+[desktop](https://docs.flutter.dev/deployment).
+
 ## Database data
 
 The Render MySQL service starts empty. Import only the records you want

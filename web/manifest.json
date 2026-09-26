@@ -1,11 +1,11 @@
 {
-    "name": "kabadiwala_connect",
-    "short_name": "kabadiwala_connect",
+    "name": "Kabadiwala Connect",
+    "short_name": "Kabadiwala",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#fffdf5",
+    "theme_color": "#2e7d32",
+    "description": "Kabadiwala Connect e-waste solutions",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

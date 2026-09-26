@@ -44,3 +44,6 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/branding/kabadiwala_logo_full.png
+    - assets/branding/kabadiwala_logo_mark.png
