@@ -8,12 +8,18 @@ and a free Aiven MySQL database.
 
 1. Create an Aiven MySQL service on its free plan and wait until it is running.
    From its **Overview / Connection information**, copy the MySQL URI and
-   download its CA certificate.
+   download its CA certificate. Use Aiven's database name (often `defaultdb`),
+   or create `kabadiwala_db` from the Aiven **Databases** page.
 2. The Git repository must be available to your Render account. If you do not
    own the source repository, fork it to your GitHub account first. In Render,
    create a Blueprint from your fork using `render.yaml`.
-3. Set `KABADIWALA_DATABASE_URL` to the Aiven MySQL URI. Set
-   `KABADIWALA_DB_SSL_CA` to the contents of Aiven's CA certificate.
+3. Set `KABADIWALA_DATABASE_URL` to the Aiven connection URI. It can use
+   `mysql://` or `mysql+aiomysql://`; include `?ssl=true` if Aiven's URI does
+   not already include an SSL option. Set `KABADIWALA_DB_SSL_CA` to the
+   contents of Aiven's CA certificate so the connection verifies the server.
+   The application converts the URL to `mysql+aiomysql` and enables TLS. Keep
+   both values in Render's environment settings; do not put credentials in
+   source code. URL-encode special characters in the username or password.
 4. Wait for the API service to deploy, then copy its HTTPS URL. The app creates
    its tables on startup. Local MySQL records are not copied automatically.
 

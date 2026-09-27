@@ -24,16 +24,19 @@ if database_url:
         )
         if sslmode:
             connect_args["ssl"] = "require" if sslmode == "require" else sslmode
-    elif parsed_url.drivername == "mysql":
+    elif parsed_url.drivername in {"mysql", "mysql+aiomysql"}:
         # Managed MySQL providers commonly provide mysql:// URIs. This app uses
         # aiomysql; translate provider SSL options into its SSLContext argument.
         query = dict(parsed_url.query)
-        sslmode = query.pop("ssl-mode", query.pop("sslmode", None))
+        ssl_flag = query.pop("ssl", None)
+        sslmode = query.pop("ssl-mode", None) or query.pop("sslmode", None)
         database_url = parsed_url.set(
             drivername="mysql+aiomysql", query=query
         )
         ca_pem = os.getenv("KABADIWALA_DB_SSL_CA")
-        if sslmode or ca_pem:
+        ssl_setting = (sslmode or ssl_flag or "").lower()
+        ssl_enabled = ssl_setting not in {"", "0", "false", "no", "disabled"}
+        if ssl_enabled or ca_pem:
             connect_args["ssl"] = ssl.create_default_context(
                 cadata=ca_pem if ca_pem else None
             )
@@ -57,7 +60,7 @@ else:
 engine_args = {"echo": True, "pool_size": 5, "max_overflow": 10}
 if connect_args:
     engine_args["connect_args"] = connect_args
-
+D
 engine = create_async_engine(database_url, **engine_args)
 
 AsyncSessionLocal = async_sessionmaker(
