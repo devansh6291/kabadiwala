@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../app_colors.dart';
 import '../models/recycler.dart';
+import '../data/demo_recycler_directory.dart';
 import '../services/backend_service.dart';
 
 /// Lists authorized recyclers/aggregators from the live backend database.
@@ -63,14 +64,26 @@ class _RecyclerDataScreenState extends State<RecyclerDataScreen> {
           // Filter out storage-only Kabadiwalas so only actual processing recyclers show
           final recyclers =
               snapshot.data!.where((r) => !r.isStorageOnly).toList();
+          final visibleRecyclers = recyclers.isEmpty
+              ? DemoRecyclerDirectory.recyclers
+              : recyclers;
+          final includesSamples =
+              visibleRecyclers.any((recycler) => recycler.isSampleData);
 
           return RefreshIndicator(
             onRefresh: _refresh,
             child: ListView.separated(
               padding: const EdgeInsets.all(16),
-              itemCount: recyclers.length,
+              itemCount: visibleRecyclers.length + 1,
               separatorBuilder: (_, __) => const SizedBox(height: 12),
-              itemBuilder: (context, index) => _recyclerCard(recyclers[index]),
+              itemBuilder: (context, index) => index == 0
+                  ? Text(
+                      includesSamples
+                          ? 'Sample profiles appear because no matching live recycler records are available.'
+                          : 'Recycler directory from the connected service.',
+                      style: TextStyle(color: AppColors.textSecondary),
+                    )
+                  : _recyclerCard(visibleRecyclers[index - 1]),
             ),
           );
         },
@@ -79,7 +92,9 @@ class _RecyclerDataScreenState extends State<RecyclerDataScreen> {
   }
 
   Widget _recyclerCard(Recycler r) {
-    final statusColor = r.authorizationStatus == 'authorized'
+    final statusColor = r.isSampleData
+        ? AppColors.pending
+        : r.authorizationStatus == 'authorized'
         ? AppColors.success
         : r.authorizationStatus == 'pending'
             ? AppColors.pending
@@ -112,6 +127,14 @@ class _RecyclerDataScreenState extends State<RecyclerDataScreen> {
                           fontWeight: FontWeight.w700,
                           color: statusColor)),
                 ),
+                if (r.isSampleData) ...[
+                  const SizedBox(width: 6),
+                  const Chip(
+                    label: Text('Sample'),
+                    visualDensity: VisualDensity.compact,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                ],
               ],
             ),
             const SizedBox(height: 8),

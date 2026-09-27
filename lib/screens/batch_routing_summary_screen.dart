@@ -98,6 +98,7 @@ class _BatchRoutingSummaryScreenState extends State<BatchRoutingSummaryScreen> {
         title = 'Routed directly';
         subtitle =
             'Meets ${result.recycler!.name}\'s vehicle capacity alone  •  pickup scheduled directly.';
+        showForm6Button = true;
         break;
       case RoutingOutcome.pooling:
         icon = Icons.hourglass_bottom;
@@ -121,6 +122,7 @@ class _BatchRoutingSummaryScreenState extends State<BatchRoutingSummaryScreen> {
         title = 'Routed to storage';
         subtitle =
             'Held by ${result.storageKabadiwala!.name} until ${result.recycler!.name}\'s pool completes.';
+        showForm6Button = true;
         break;
     }
 
@@ -162,6 +164,13 @@ class _BatchRoutingSummaryScreenState extends State<BatchRoutingSummaryScreen> {
             const SizedBox(height: 4),
             Text(subtitle,
                 style: const TextStyle(fontSize: 13, color: Colors.black87)),
+            if (result.isSampleData) ...[
+              const SizedBox(height: 6),
+              const Text(
+                'Sample route — no real pickup is booked.',
+                style: TextStyle(fontSize: 12, color: AppColors.pending),
+              ),
+            ],
             if (showForm6Button) ...[
               const SizedBox(height: 10),
               SizedBox(

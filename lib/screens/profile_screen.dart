@@ -6,6 +6,7 @@ import '../models/collector.dart';
 import '../models/collector_store.dart';
 import '../models/lot_store.dart';
 import 'lot_history_screen.dart';
+import 'earnings_ledger_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -242,10 +243,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const SizedBox(height: 8),
           _sectionCard(
             title: 'Settled transactions',
-            child: Text(
-              '${_profile.transactionHistoryIds.length} completed · ₹${_profile.totalEarnings.toStringAsFixed(0)} total\n'
-              '(updates once the transaction/settlement flow is built)',
-              style: const TextStyle(fontSize: 13, color: Colors.black54),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${_profile.transactionHistoryIds.length} completed · ₹${_profile.totalEarnings.toStringAsFixed(0)} total recorded in profile',
+                  style: const TextStyle(fontSize: 13, color: Colors.black54),
+                ),
+                TextButton.icon(
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const EarningsLedgerScreen()),
+                  ),
+                  icon: const Icon(Icons.account_balance_wallet_outlined),
+                  label: const Text('Open earnings and pending dues'),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 12),

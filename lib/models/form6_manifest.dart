@@ -19,6 +19,14 @@ class Form6Checkpoint {
     this.photoHash,
     required this.cumulativeHash,
   });
+
+  factory Form6Checkpoint.fromJson(Map<String, dynamic> json) => Form6Checkpoint(
+        signatureHash: (json['signature_hash'] ?? json['signatureHash'] ?? '').toString(),
+        timestamp: DateTime.tryParse((json['timestamp'] ?? '').toString()) ?? DateTime.now(),
+        latitude: (json['latitude'] as num?)?.toDouble(),
+        longitude: (json['longitude'] as num?)?.toDouble(),
+        cumulativeHash: (json['cumulative_hash'] ?? json['cumulativeHash'] ?? '').toString(),
+      );
 }
 
 /// Digital Form-6 Manifest — traceability record for one pooled dispatch.
@@ -56,4 +64,20 @@ class Form6Manifest {
     this.checkpointTransit,
     this.checkpointDelivery,
   });
+
+  factory Form6Manifest.fromJson(Map<String, dynamic> json) => Form6Manifest(
+        manifestId: (json['manifest_id'] ?? json['manifestId'] ?? '').toString(),
+        senderName: (json['sender_name'] ?? json['senderName'] ?? '').toString(),
+        senderPhone: (json['sender_phone'] ?? json['senderPhone'] ?? '').toString(),
+        materialType: (json['material_type'] ?? json['materialType'] ?? '').toString(),
+        quantity: ((json['quantity'] ?? 0) as num).toDouble(),
+        destinationRecyclerId: (json['destination_recycler_id'] ?? json['destinationRecyclerId'] ?? '').toString(),
+        checkpointDispatch: _checkpoint(json['checkpoint_dispatch'] ?? json['checkpointDispatch']),
+        checkpointTransit: _checkpoint(json['checkpoint_transit'] ?? json['checkpointTransit']),
+        checkpointDelivery: _checkpoint(json['checkpoint_delivery'] ?? json['checkpointDelivery']),
+      );
+
+  static Form6Checkpoint? _checkpoint(dynamic value) => value is Map
+      ? Form6Checkpoint.fromJson(Map<String, dynamic>.from(value))
+      : null;
 }

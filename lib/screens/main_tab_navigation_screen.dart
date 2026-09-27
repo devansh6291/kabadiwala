@@ -34,7 +34,7 @@ class _MainTabNavigationScreenState extends State<MainTabNavigationScreen> {
       ),
       const RecyclerDataScreen(),
       const NearbyKabadiwalasScreen(),
-      const PriceDiscoveryScreen(),
+      PriceDiscoveryScreen(languageCode: widget.currentLanguage),
       const MarketNewsScreen(),
     ];
 

@@ -79,12 +79,18 @@ class Pool {
     }
 
     return Pool(
-      id: (json['pool_id'] ?? json['id'] ?? '').toString(),
+      id: (json['pool_id'] ?? json['poolId'] ?? json['id'] ?? '').toString(),
       category:
-          (json['category'] ?? json['material_category'] ?? '').toString(),
+          (json['category'] ??
+                  json['material_category'] ??
+                  json['materialCategory'] ??
+                  '')
+              .toString(),
       recyclerId: (json['recycler_id'] ?? json['recyclerId'] ?? '').toString(),
-      thresholdKg:
-          ((json['threshold_kg'] ?? json['target_threshold_kg'] ?? 50.0) as num)
+      thresholdKg: ((json['threshold_kg'] ??
+                  json['target_threshold_kg'] ??
+                  json['targetThresholdKg'] ??
+                  50.0) as num)
               .toDouble(),
       entries: parsedEntries,
       status: parsedStatus,

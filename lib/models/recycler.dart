@@ -12,6 +12,7 @@ class Recycler {
   final String contactDetails;
   final Map<String, double> offeredRates; // category -> ₹/kg
   final String pickupAvailability; // "same_day" / "scheduled" / "none"
+  final double? distanceKm;
 
   /// Minimum lot weight (kg) this recycler requires before dispatching a vehicle.
   final double minVehicleCapacityKg;
@@ -23,6 +24,9 @@ class Recycler {
 
   /// ₹ per item, per week — only meaningful when [isStorageOnly] is true.
   final double? storageRatePerItemPerWeek;
+
+  /// True when this profile is a local sample used for demonstrations.
+  final bool isSampleData;
 
   const Recycler({
     required this.recyclerId,
@@ -38,10 +42,12 @@ class Recycler {
     required this.contactDetails,
     required this.offeredRates,
     required this.pickupAvailability,
+    this.distanceKm,
     required this.minVehicleCapacityKg,
     required this.hasOwnLogistics,
     this.isStorageOnly = false,
     this.storageRatePerItemPerWeek,
+    this.isSampleData = false,
   });
 
   factory Recycler.fromJson(Map<String, dynamic> json) {
@@ -83,6 +89,7 @@ class Recycler {
               json['pickupAvailability'] ??
               'scheduled')
           .toString(),
+      distanceKm: (json['distance_km'] as num?)?.toDouble(),
       minVehicleCapacityKg: ((json['min_vehicle_capacity_kg'] ??
               json['minVehicleCapacityKg'] ??
               0.0) as num)
@@ -96,6 +103,7 @@ class Recycler {
       storageRatePerItemPerWeek: (json['storage_rate_per_item_week'] ??
               json['storageRatePerItemPerWeek'] as num?)
           ?.toDouble(),
+      isSampleData: json['is_sample_data'] == true || json['isSampleData'] == true,
     );
   }
 
@@ -113,9 +121,11 @@ class Recycler {
         'contact_details': contactDetails,
         'offered_rates': offeredRates,
         'pickup_availability': pickupAvailability,
+        'distance_km': distanceKm,
         'min_vehicle_capacity_kg': minVehicleCapacityKg,
         'has_own_logistics': hasOwnLogistics,
         'is_storage_only': isStorageOnly,
         'storage_rate_per_item_week': storageRatePerItemPerWeek,
+        'is_sample_data': isSampleData,
       };
 }

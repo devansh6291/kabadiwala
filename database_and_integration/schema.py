@@ -91,6 +91,39 @@ class TransactionSchema(BaseModel):
     transaction_status: str = Field("created", alias="transactionStatus")
     model_config = ConfigDict(populate_by_name=True, from_attributes=True, serialize_by_alias=True, extra="allow")
 
+class PaymentRecordSchema(BaseModel):
+    id: str
+    lot_id: str = Field(..., alias="lotId")
+    collector_id: str = Field(..., alias="collectorId")
+    recycler_id: Optional[str] = Field(None, alias="recyclerId")
+    amount: float
+    method: str
+    status: str = "paid"
+    recorded_at: datetime = Field(..., alias="recordedAt")
+    model_config = ConfigDict(populate_by_name=True, from_attributes=True, serialize_by_alias=True, extra="allow")
+
+class LogisticsRequestSchema(BaseModel):
+    request_id: Optional[str] = Field(None, alias="requestId")
+    recycler_id: str = Field(..., alias="recyclerId")
+    collector_id: Optional[str] = Field(None, alias="collectorId")
+    collector_name: str = Field(..., alias="collectorName")
+    collector_phone: Optional[str] = Field(None, alias="collectorPhone")
+    collector_location: Optional[str] = Field(None, alias="collectorLocation")
+    lot_id: str = Field(..., alias="lotId")
+    category: str
+    sub_category: Optional[str] = Field(None, alias="subCategory")
+    approx_weight_kg: float = Field(..., alias="approxWeightKg")
+    estimated_value: Optional[float] = Field(None, alias="estimatedValue")
+    quoted_price: Optional[float] = Field(None, alias="quotedPrice")
+    lot_latitude: Optional[float] = Field(None, alias="lotLatitude")
+    lot_longitude: Optional[float] = Field(None, alias="lotLongitude")
+    photo_refs: Optional[List[str]] = Field(default_factory=list, alias="photoRefs")
+    manifest_id: Optional[str] = Field(None, alias="manifestId")
+    status: str = "requested"
+    is_sample_data: bool = Field(False, alias="isSampleData")
+    created_at: Optional[datetime] = Field(None, alias="createdAt")
+    model_config = ConfigDict(populate_by_name=True, from_attributes=True, serialize_by_alias=True, extra="allow")
+
 class Form6ManifestSchema(BaseModel):
     manifest_id: str = Field(..., alias="manifestId")
     sender_name: str = Field(..., alias="senderName")

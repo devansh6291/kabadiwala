@@ -54,17 +54,10 @@ abstract class ClassifierService {
   });
 }
 
-/// TEMPORARY manual/rule-based stand-in — does not look at the photo's
-/// actual content.
+/// Offline fallback. It deliberately does not infer a material from the
+/// image; the collector chooses the category on the review screen.
 class ManualClassifierService implements ClassifierService {
-  static const List<String> _categories = [
-    'PCB',
-    'CRT',
-    'Cables',
-    'Battery',
-    'Motor',
-    'MixedPlastics'
-  ];
+  static const String _defaultCategory = 'OtherEwaste';
   static const Map<String, double> _indicativeRatePerKg = {
     'PCB': 180,
     'CRT': 8,
@@ -72,6 +65,7 @@ class ManualClassifierService implements ClassifierService {
     'Battery': 40,
     'Motor': 60,
     'MixedPlastics': 15,
+    'OtherEwaste': 25,
   };
 
   @override
@@ -79,9 +73,8 @@ class ManualClassifierService implements ClassifierService {
     required String photoPath,
     double? approxWeightKg,
   }) async {
-    final seed = photoPath.hashCode.abs();
-    final category = _categories[seed % _categories.length];
-    final weight = approxWeightKg ?? (0.5 + (seed % 40) / 10.0);
+    final category = _defaultCategory;
+    final weight = approxWeightKg ?? 1.0;
     final rate = _indicativeRatePerKg[category] ?? 10.0;
 
     return DetectedItem(

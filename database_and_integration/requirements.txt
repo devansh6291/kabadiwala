@@ -4,6 +4,7 @@ python-multipart
 sqlalchemy[asyncio]
 aiomysql
 httpx
+PyJWT[crypto]
 numpy
 pandas
 matplotlib

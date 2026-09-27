@@ -45,6 +45,11 @@ class Lot {
   /// backend matching engine.
   String? recyclerId;
 
+  /// Locally recorded settlement; cash is supported without payment integration.
+  String paymentStatus;
+  String? paymentMethod;
+  bool paymentSynced;
+
   Lot({
     required this.id,
     required this.category,
@@ -59,6 +64,9 @@ class Lot {
     this.longitude,
     this.syncStatus = 'pending',
     this.recyclerId,
+    this.paymentStatus = 'pending',
+    this.paymentMethod,
+    this.paymentSynced = false,
   });
 
   Lot copyWith({
@@ -73,6 +81,9 @@ class Lot {
     double? longitude,
     String? syncStatus,
     String? recyclerId,
+    String? paymentStatus,
+    String? paymentMethod,
+    bool? paymentSynced,
   }) {
     return Lot(
       id: id,
@@ -88,6 +99,9 @@ class Lot {
       longitude: longitude ?? this.longitude,
       syncStatus: syncStatus ?? this.syncStatus,
       recyclerId: recyclerId ?? this.recyclerId,
+      paymentStatus: paymentStatus ?? this.paymentStatus,
+      paymentMethod: paymentMethod ?? this.paymentMethod,
+      paymentSynced: paymentSynced ?? this.paymentSynced,
     );
   }
 
@@ -110,6 +124,9 @@ class Lot {
         'longitude': longitude,
         'syncStatus': syncStatus,
         'recyclerId': recyclerId,
+        'paymentStatus': paymentStatus,
+        'paymentMethod': paymentMethod,
+        'paymentSynced': paymentSynced,
       };
 
   factory Lot.fromJson(Map<String, dynamic> json) => Lot(
@@ -126,5 +143,8 @@ class Lot {
         longitude: (json['longitude'] as num?)?.toDouble(),
         syncStatus: json['syncStatus'] as String? ?? 'pending',
         recyclerId: json['recyclerId'] as String?,
+        paymentStatus: json['paymentStatus'] as String? ?? 'pending',
+        paymentMethod: json['paymentMethod'] as String?,
+        paymentSynced: json['paymentSynced'] as bool? ?? false,
       );
 }

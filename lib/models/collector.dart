@@ -16,6 +16,8 @@ class CollectorProfile {
   /// True when this device is acting as an aggregator / large Kabadiwala
   /// hub that pools lots on behalf of nearby smaller collectors.
   bool isAggregator;
+  String role;
+  String? recyclerId;
 
   CollectorProfile({
     required this.collectorId,
@@ -31,6 +33,8 @@ class CollectorProfile {
     this.longitude,
     this.isOnboarded = false,
     this.isAggregator = false,
+    this.role = 'collector',
+    this.recyclerId,
   }) : transactionHistoryIds = transactionHistoryIds ?? [];
 
   Map<String, dynamic> toJson() => {
@@ -47,6 +51,8 @@ class CollectorProfile {
         'longitude': longitude,
         'is_onboarded': isOnboarded,
         'is_aggregator': isAggregator,
+        'role': role,
+        'recycler_id': recyclerId,
       };
 
   factory CollectorProfile.fromJson(Map<String, dynamic> json) =>
@@ -79,5 +85,7 @@ class CollectorProfile {
             (json['is_onboarded'] ?? json['isOnboarded'] ?? false) == true,
         isAggregator:
             (json['is_aggregator'] ?? json['isAggregator'] ?? false) == true,
+        role: (json['role'] ?? 'collector').toString(),
+        recyclerId: (json['recycler_id'] ?? json['recyclerId'])?.toString(),
       );
 }

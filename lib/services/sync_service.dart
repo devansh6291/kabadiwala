@@ -6,6 +6,7 @@ import '../models/lot_store.dart';
 import '../models/collector_store.dart';
 import 'api_client.dart';
 import 'firebase_service.dart';
+import 'backend_service.dart';
 
 /// Background synchronization manager:
 /// Scans local Hive storage for pending lots, uploads photos to Firebase Storage,
@@ -28,23 +29,36 @@ class SyncService {
     int syncedCount = 0;
     try {
       final allLots = LotStore.getAllLots();
-      final pendingLots =
-          allLots.where((l) => l.syncStatus == 'pending').toList();
+      final pendingLots = allLots.where((l) =>
+          l.syncStatus == 'pending' ||
+          l.syncStatus == 'failed' ||
+          (l.paymentStatus == 'paid' && !l.paymentSynced)).toList();
 
       debugPrint('[SYNC] Processing ${pendingLots.length} pending lot(s)...');
 
       for (final lot in pendingLots) {
-        final success = await _uploadSingleLot(lot);
-        if (success) {
-          final updated = lot.copyWith(syncStatus: 'synced');
-          await LotStore.updateLot(updated);
-          syncedCount++;
-          debugPrint('[SYNC] Lot ${lot.id} successfully synced.');
-        } else {
-          final failed = lot.copyWith(syncStatus: 'failed');
-          await LotStore.updateLot(failed);
-          debugPrint('[SYNC] Failed to sync Lot ${lot.id}.');
+        var updated = lot;
+        if (lot.syncStatus == 'pending' || lot.syncStatus == 'failed') {
+          final success = await _uploadSingleLot(lot);
+          updated = updated.copyWith(syncStatus: success ? 'synced' : 'failed');
+          if (success) {
+            syncedCount++;
+            debugPrint('[SYNC] Lot ${lot.id} successfully synced.');
+          } else {
+            debugPrint('[SYNC] Failed to sync Lot ${lot.id}.');
+          }
         }
+        if (lot.paymentStatus == 'paid' && !lot.paymentSynced) {
+          final paymentSynced = await BackendService().recordPayment(
+            lotId: lot.id,
+            method: lot.paymentMethod ?? 'cash',
+            amount: lot.finalSaleValue ?? 0,
+            recyclerId: lot.recyclerId,
+          );
+          updated = updated.copyWith(paymentSynced: paymentSynced);
+          if (paymentSynced) syncedCount++;
+        }
+        await LotStore.updateLot(updated);
       }
     } catch (e) {
       debugPrint('[SYNC ERROR] Sync pass failed: $e');

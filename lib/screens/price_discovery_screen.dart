@@ -1,17 +1,19 @@
 import 'package:flutter/material.dart';
-import 'package:dio/dio.dart';
 import 'package:intl/intl.dart';
+import 'package:flutter_tts/flutter_tts.dart';
 import '../app_colors.dart';
 import '../services/api_client.dart';
 
 class PriceDiscoveryScreen extends StatefulWidget {
-  const PriceDiscoveryScreen({super.key});
+  final String languageCode;
+  const PriceDiscoveryScreen({super.key, this.languageCode = 'hi'});
 
   @override
   State<PriceDiscoveryScreen> createState() => _PriceDiscoveryScreenState();
 }
 
 class _PriceDiscoveryScreenState extends State<PriceDiscoveryScreen> {
+  final FlutterTts _speech = FlutterTts();
   late Future<List<Map<String, dynamic>>> _pricesFuture;
 
   // Illustrative per-item figures for the demo. Real offers depend on city,
@@ -64,20 +66,65 @@ class _PriceDiscoveryScreenState extends State<PriceDiscoveryScreen> {
     _pricesFuture = _fetchPrices();
   }
 
-  Future<List<Map<String, dynamic>>> _fetchPrices() async {
+  @override
+  void dispose() {
+    _speech.stop();
+    super.dispose();
+  }
+
+  Future<void> _speakPrice(Map<String, dynamic> entry) async {
+    final material = entry['materialCategory']?.toString() ?? 'material';
+    final amount = (entry['price'] as num?)?.toDouble() ?? 0;
+    final location = entry['location']?.toString();
+    final lang = widget.languageCode;
+    final locale = lang == 'mr' ? 'mr-IN' : lang == 'hi' ? 'hi-IN' : 'en-IN';
+    final sentence = lang == 'mr'
+        ? '$material. खरेदीचा दर ${amount.toStringAsFixed(0)} रुपये प्रति किलो. ${location ?? ''}'
+        : lang == 'hi'
+            ? '$material. खरीदने का भाव ${amount.toStringAsFixed(0)} रुपये प्रति किलो. ${location ?? ''}'
+            : '$material. Buying reference ${amount.toStringAsFixed(0)} rupees per kilogram. ${location ?? ''}';
     try {
-      final response = await ApiClient().dio.get('/prices');
-      final liveEntries = List<Map<String, dynamic>>.from(response.data);
-      final liveNames = liveEntries
-          .map((entry) => entry['materialCategory']?.toString().toLowerCase())
-          .toSet();
-      final additionalSamples = _samplePrices.where((entry) =>
-          !liveNames.contains(entry['materialCategory'].toString().toLowerCase()));
-      return [...liveEntries, ...additionalSamples];
+      await _speech.setLanguage(locale);
+      await _speech.setSpeechRate(0.42);
+      await _speech.speak(sentence);
+    } catch (e) {
+      debugPrint('[PRICE SPEECH ERROR] $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Speech is unavailable. Check the device text-to-speech voice settings.')),
+        );
+      }
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> _fetchPrices() async {
+    final api = ApiClient().dio;
+    List<Map<String, dynamic>> liveEntries = [];
+    List<Map<String, dynamic>> fieldEntries = [];
+    try {
+      final response = await api.get('/prices');
+      liveEntries = List<Map<String, dynamic>>.from(response.data);
     } catch (e) {
       debugPrint('[PRICE API ERROR] $e');
-      return _samplePrices;
     }
+    try {
+      final response = await api.get('/price-dataset');
+      fieldEntries = List<Map<String, dynamic>>.from(response.data).map((entry) => {
+        ...entry,
+        'price': entry['buyingPrice'],
+        'changePercent': entry['trendPercent'],
+        'isFieldData': true,
+      }).toList();
+    } catch (e) {
+      debugPrint('[FIELD PRICE DATA ERROR] $e');
+    }
+
+    final observedNames = {...liveEntries, ...fieldEntries}
+        .map((entry) => entry['materialCategory']?.toString().toLowerCase())
+        .toSet();
+    final additionalSamples = _samplePrices.where((entry) =>
+        !observedNames.contains(entry['materialCategory'].toString().toLowerCase()));
+    return [...fieldEntries, ...liveEntries, ...additionalSamples];
   }
 
   Future<void> _refresh() async {
@@ -146,7 +193,7 @@ class _PriceDiscoveryScreenState extends State<PriceDiscoveryScreen> {
                 if (index == _itemPrices.length + 1) {
                   return Padding(
                     padding: const EdgeInsets.only(top: 10),
-                    child: Text('Material benchmarks (per kg)', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+                    child: Text('Market references and recorded field prices', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
                   );
                 }
                 final entry = entries[index - _itemPrices.length - 2];
@@ -154,6 +201,7 @@ class _PriceDiscoveryScreenState extends State<PriceDiscoveryScreen> {
                     ?.toLocal();
                 final price = (entry['price'] as num?)?.toDouble() ?? 0.0;
                 final isDemo = entry['isDemo'] == true;
+                final isFieldData = entry['isFieldData'] == true;
                 return Card(
                   elevation: 1,
                   shape: RoundedRectangleBorder(
@@ -167,11 +215,23 @@ class _PriceDiscoveryScreenState extends State<PriceDiscoveryScreen> {
                             style: const TextStyle(
                                 fontWeight: FontWeight.bold, fontSize: 16)),
                         const SizedBox(height: 8),
-                        _priceStat(isDemo ? 'Sample estimate' : 'Global reference', price,
-                            AppColors.primaryGreen),
+                        Row(children: [
+                          Expanded(child: _priceStat(isDemo ? 'Indicative estimate' : isFieldData ? 'Latest collector buying price' : 'Global reference', price,
+                              AppColors.primaryGreen)),
+                          IconButton(
+                            tooltip: 'Speak price',
+                            onPressed: () => _speakPrice(entry),
+                            icon: const Icon(Icons.volume_up, color: AppColors.primaryGreen),
+                          ),
+                        ]),
+                        if (isFieldData) ...[
+                          const SizedBox(height: 8),
+                          Text('Recycler/aggregator offer: ₹${(entry['sellingPrice'] as num?)?.toStringAsFixed(2) ?? '—'}  •  Range: ₹${(entry['marketRangeLow'] as num?)?.toStringAsFixed(2) ?? '—'}–₹${(entry['marketRangeHigh'] as num?)?.toStringAsFixed(2) ?? '—'}  •  ${entry['location'] ?? 'Location not recorded'}', style: const TextStyle(fontSize: 12)),
+                          Text('${entry['materialSubCategory'] ?? entry['materialCategory']}  •  ${(entry['observations'] ?? 0)} observations', style: const TextStyle(fontSize: 11, color: Colors.black54)),
+                        ],
                         const SizedBox(height: 8),
                         Text(
-                          '${isDemo ? 'Demo only — verify local rates' : date == null ? 'Latest available' : 'Updated ${dateFormat.format(date)}'}  •  ${entry['source'] ?? 'Live market API'}  •  per kg',
+                          '${isDemo ? 'Indicative only — verify local rates' : date == null ? 'Latest available' : 'Updated ${dateFormat.format(date)}'}  •  ${entry['source'] ?? 'Live market API'}  •  ${entry['unit'] ?? 'per kg'}',
                           style: const TextStyle(
                               fontSize: 11, color: Colors.black45),
                         ),
@@ -204,9 +264,9 @@ class _PriceDiscoveryScreenState extends State<PriceDiscoveryScreen> {
           Text('${item.material} · typical weight ${item.typicalWeightKg == item.typicalWeightKg.roundToDouble() ? item.typicalWeightKg.toStringAsFixed(0) : item.typicalWeightKg.toStringAsFixed(1)} kg', style: const TextStyle(fontSize: 12, color: Colors.black54)),
           const SizedBox(height: 12),
           Row(children: [
-            Expanded(child: _priceStat('Customer receives (estimate)', customerAmount, AppColors.primaryGreen)),
+            Expanded(child: _priceStat('Customer receives (estimate)', customerAmount, AppColors.primaryGreen, unitLabel: ' total')),
             const SizedBox(width: 12),
-            Expanded(child: _priceStat('Recycler resale (estimate)', recyclerAmount, AppColors.accent)),
+            Expanded(child: _priceStat('Recycler resale (estimate)', recyclerAmount, AppColors.accent, unitLabel: ' total')),
           ]),
           const SizedBox(height: 7),
           Text('Demo rates: ₹${item.customerRatePerKg.toStringAsFixed(0)}/kg paid · ₹${item.recyclerRatePerKg.toStringAsFixed(0)}/kg resale', style: const TextStyle(fontSize: 11, color: Colors.black45)),
@@ -215,13 +275,14 @@ class _PriceDiscoveryScreenState extends State<PriceDiscoveryScreen> {
     );
   }
 
-  Widget _priceStat(String label, double value, Color color) {
+  Widget _priceStat(String label, double value, Color color,
+      {String unitLabel = '/kg'}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(label,
             style: const TextStyle(fontSize: 11, color: Colors.black54)),
-        Text('₹${value.toStringAsFixed(2)}/kg',
+        Text('₹${value.toStringAsFixed(2)}$unitLabel',
             style: TextStyle(
                 fontSize: 18, fontWeight: FontWeight.bold, color: color)),
       ],

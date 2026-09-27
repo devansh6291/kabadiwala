@@ -5,8 +5,8 @@ import 'models/lot_store.dart';
 import 'models/collector_store.dart';
 import 'screens/main_tab_navigation_screen.dart';
 import 'screens/login_screen.dart';
+import 'screens/recycler_dashboard_screen.dart';
 import 'services/firebase_service.dart';
-import 'services/api_client.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -18,11 +18,6 @@ void main() async {
   await Hive.initFlutter();
   await LotStore.init();
   await CollectorStore.init();
-
-  // TEMPORARY: override for physical-device USB testing via `adb reverse`.
-  // Remove or make this conditional once testing on an emulator or over
-  // real WiFi with a LAN IP instead.
-  ApiClient().updateBaseUrl('http://10.77.222.41:8000');
 
   runApp(const MyApp());
 }
@@ -50,6 +45,15 @@ class _MyAppState extends State<MyApp> {
     });
   }
 
+  Future<void> _onSignOut() async {
+    final profile = CollectorStore.getOrCreate();
+    profile.isOnboarded = false;
+    profile.role = 'collector';
+    profile.recyclerId = null;
+    await CollectorStore.save(profile);
+    if (mounted) setState(() => _onboarded = false);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -60,6 +64,7 @@ class _MyAppState extends State<MyApp> {
 
   @override
   Widget build(BuildContext context) {
+    final profile = CollectorStore.getOrCreate();
     return MaterialApp(
       title: 'Kabadiwala Connect',
       debugShowCheckedModeBanner: false,
@@ -75,7 +80,13 @@ class _MyAppState extends State<MyApp> {
         ),
       ),
       home: _onboarded
-          ? MainTabNavigationScreen(
+          ? profile.role == 'recycler'
+              ? RecyclerDashboardScreen(
+                  recyclerId: profile.recyclerId ?? 'sample-recycler-indore-01',
+                  languageCode: currentLanguage,
+                  onSignOut: _onSignOut,
+                )
+              : MainTabNavigationScreen(
               currentLanguage: currentLanguage,
               onLanguageChanged: changeLanguage,
             )

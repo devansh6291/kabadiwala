@@ -4,6 +4,8 @@ import '../models/lot.dart';
 import '../models/pool.dart';
 import '../models/recycler.dart';
 import '../models/storage_host.dart';
+import '../data/demo_recycler_directory.dart';
+import '../models/collector_store.dart';
 import 'api_client.dart';
 import 'location_service.dart';
 
@@ -20,12 +22,14 @@ class RoutingResult {
   final Recycler? recycler;
   final Pool? pool;
   final StorageHost? storageKabadiwala;
+  final bool isSampleData;
 
   const RoutingResult({
     required this.outcome,
     this.recycler,
     this.pool,
     this.storageKabadiwala,
+    this.isSampleData = false,
   });
 }
 
@@ -54,15 +58,65 @@ class RecyclerMatchingService {
 
       final List<dynamic> recyclerData = recyclerRes.data;
       if (recyclerData.isEmpty) {
-        return const RoutingResult(outcome: RoutingOutcome.noRecyclerAvailable);
+        return _readySampleRoute(lot);
       }
 
-      final candidates = recyclerData.map((j) => Recycler.fromJson(j)).toList();
+      final candidates = recyclerData
+          .map((j) => Recycler.fromJson(j))
+          .where((recycler) => recycler.materialsAccepted
+              .any((material) => material.toLowerCase() == lot.category.toLowerCase()))
+          .toList();
+      if (candidates.isEmpty) return _readySampleRoute(lot);
 
       // Sort by best offered rate for the material
-      candidates.sort((a, b) => (b.offeredRates[lot.category] ?? 0)
-          .compareTo(a.offeredRates[lot.category] ?? 0));
+      candidates.sort((a, b) {
+        final rateA = a.offeredRates[lot.category] ?? 0;
+        final rateB = b.offeredRates[lot.category] ?? 0;
+        final relativeRateGap = (rateA - rateB).abs() /
+            (rateA > rateB ? rateA : rateB).clamp(1, double.infinity);
+        // Prefer a materially better offer; when rates are close, prefer
+        // pickup availability and then the nearer authorized facility.
+        if (relativeRateGap >= 0.10) return rateB.compareTo(rateA);
+        int availability(String value) {
+          final normalized = value.toLowerCase();
+          if (normalized.contains('immediate') || normalized.contains('same')) return 0;
+          if (normalized.contains('scheduled')) return 1;
+          if (normalized.contains('none')) return 2;
+          return 1;
+        }
+        final byAvailability = availability(a.pickupAvailability)
+            .compareTo(availability(b.pickupAvailability));
+        if (byAvailability != 0) return byAvailability;
+        return (a.distanceKm ?? double.infinity)
+            .compareTo(b.distanceKm ?? double.infinity);
+      });
       final bestRecycler = candidates.first;
+
+      // Make a logistics request visible in the matched recycler's inbox.
+      // This is best-effort and never blocks the collector's offline flow.
+      try {
+        final collector = CollectorStore.getOrCreate();
+        await dio.post('/logistics-requests', data: {
+          'recyclerId': bestRecycler.recyclerId,
+          'collectorId': collector.collectorId,
+          'collectorName': collector.name.isEmpty ? 'Collector' : collector.name,
+          'collectorPhone': collector.phoneNumber,
+          'collectorLocation': collector.operatingLocation,
+          'lotId': lot.id,
+          'category': lot.category,
+          'subCategory': lot.subCategory,
+          'approxWeightKg': lot.approxWeightKg,
+          'estimatedValue': lot.estimatedValue,
+          'quotedPrice': lot.quotedPrice,
+          'lotLatitude': lot.latitude,
+          'lotLongitude': lot.longitude,
+          'photoRefs': lot.photoPaths,
+          'status': 'requested',
+          'createdAt': DateTime.now().toUtc().toIso8601String(),
+        });
+      } catch (e) {
+        debugPrint('[LOGISTICS REQUEST NOTICE] $e');
+      }
 
       // 3. Direct Dispatch Check
       if (lot.approxWeightKg >= bestRecycler.minVehicleCapacityKg) {
@@ -83,8 +137,21 @@ class RecyclerMatchingService {
           .map((j) => Pool.fromJson(j))
           .where((p) =>
               p.status == PoolStatus.collecting ||
-              p.status == PoolStatus.storageNeeded)
+              p.status == PoolStatus.storageNeeded ||
+              p.status == PoolStatus.readyForPickup)
           .toList();
+
+      final existingWeight = activePools.isEmpty
+          ? 0.0
+          : activePools.first.totalWeightKg;
+      final requiredWeight = activePools.isEmpty
+          ? bestRecycler.minVehicleCapacityKg
+          : activePools.first.thresholdKg;
+      if (existingWeight + lot.approxWeightKg < requiredWeight) {
+        // Keep the real collecting pool untouched while still allowing a
+        // complete, clearly identified walkthrough on an underfilled lot.
+        return _readySampleRoute(lot);
+      }
 
       Pool targetPool;
       if (activePools.isNotEmpty) {
@@ -159,7 +226,36 @@ class RecyclerMatchingService {
       );
     } catch (e) {
       debugPrint('[ROUTING ERROR] $e');
-      return const RoutingResult(outcome: RoutingOutcome.noRecyclerAvailable);
+      return _readySampleRoute(lot);
     }
+  }
+
+  static RoutingResult _readySampleRoute(Lot lot) {
+    final matchingSamples = DemoRecyclerDirectory.forMaterial(lot.category);
+    final recycler = matchingSamples.isNotEmpty
+        ? matchingSamples.first
+        : DemoRecyclerDirectory.recyclers.first;
+    final weight = lot.approxWeightKg > 0 ? lot.approxWeightKg : 0.1;
+    final pool = Pool(
+      id: 'sample-pool-${lot.id}',
+      category: lot.category,
+      recyclerId: recycler.recyclerId,
+      thresholdKg: weight,
+      entries: [
+        LotPoolEntry(
+          lotId: lot.id,
+          collectorLabel: 'You',
+          weightKg: weight,
+        ),
+      ],
+      status: PoolStatus.readyForPickup,
+      createdAt: DateTime.now(),
+    );
+    return RoutingResult(
+      outcome: RoutingOutcome.poolReadyForPickup,
+      recycler: recycler,
+      pool: pool,
+      isSampleData: true,
+    );
   }
 }

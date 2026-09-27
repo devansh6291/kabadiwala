@@ -1,7 +1,9 @@
 import tempfile
 import json
 from pathlib import Path
-from fastapi import FastAPI, Depends, HTTPException, Query, File, UploadFile, Form
+from datetime import datetime, timezone
+from fastapi import FastAPI, Depends, HTTPException, Query, File, UploadFile, Form, Body
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -13,9 +15,56 @@ from external_apis import get_live_metal_benchmarks, get_live_news, get_nearby_r
 from math import radians, sin, cos, sqrt, asin
 import sys
 import os
+import uuid
+import asyncio
+import jwt
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 app = FastAPI(title="Kabadiwala E-connect API")
+
+_firebase_project_id = os.getenv("FIREBASE_PROJECT_ID", "kabadiwalaconnect-8c8c4")
+_firebase_key_client = jwt.PyJWKClient(
+    "https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com"
+)
+_bearer_auth = HTTPBearer(auto_error=False)
+_demo_recycler_phone = "+911234567891"
+_demo_recycler_id = "sample-recycler-indore-01"
+
+
+async def get_firebase_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_auth),
+) -> dict:
+    """Verify and decode a client-issued Firebase ID token."""
+    if credentials is None or credentials.scheme.lower() != "bearer":
+        raise HTTPException(status_code=401, detail="Firebase sign-in required")
+
+    def _verify_token() -> dict:
+        signing_key = _firebase_key_client.get_signing_key_from_jwt(credentials.credentials)
+        return jwt.decode(
+            credentials.credentials,
+            signing_key.key,
+            algorithms=["RS256"],
+            audience=_firebase_project_id,
+            issuer=f"https://securetoken.google.com/{_firebase_project_id}",
+            options={"require": ["exp", "iat", "sub"]},
+        )
+
+    try:
+        claims = await asyncio.to_thread(_verify_token)
+    except Exception as exc:
+        raise HTTPException(status_code=401, detail="Invalid or expired Firebase ID token") from exc
+
+    return claims
+
+
+async def require_demo_recycler(
+    claims: dict = Depends(get_firebase_user),
+) -> dict:
+    """Resolve recycler access from the verified phone-to-profile mapping."""
+    phone = str(claims.get("phone_number", ""))
+    if phone != _demo_recycler_phone:
+        raise HTTPException(status_code=403, detail="This account is not linked to a recycler profile")
+    return {"uid": claims["sub"], "phone_number": phone, "recycler_id": _demo_recycler_id}
 
 app.add_middleware(
     CORSMiddleware,
@@ -56,13 +105,13 @@ async def create_or_update_collector(collector: schema.CollectorSchema, db: Asyn
         existing_collector = result.scalar_one_or_none()
 
         if existing_collector:
-            for key, value in collector.model_dump(exclude_unset=True).items():
+            for key, value in collector.model_dump(exclude_unset=True, by_alias=False).items():
                 setattr(existing_collector, key, value)
             await db.commit()
             await db.refresh(existing_collector)
             return existing_collector
         else:
-            new_collector = models.Collector(**collector.model_dump())
+            new_collector = models.Collector(**collector.model_dump(by_alias=False))
             db.add(new_collector)
             await db.commit()
             await db.refresh(new_collector)
@@ -83,8 +132,14 @@ async def get_collector(phone_number: str, db: AsyncSession = Depends(get_db)):
 @app.post("/lots", response_model=schema.LotSchema)
 async def sync_single_lot(lot: schema.LotSchema, db: AsyncSession = Depends(get_db)):
     try:
-        new_lot = models.Lot(**lot.model_dump(exclude_unset=True))
-        db.add(new_lot)
+        values = lot.model_dump(exclude_unset=True, by_alias=False)
+        new_lot = await db.get(models.Lot, lot.id)
+        if new_lot is None:
+            new_lot = models.Lot(**values)
+            db.add(new_lot)
+        else:
+            for key, value in values.items():
+                setattr(new_lot, key, value)
         await db.commit()
         await db.refresh(new_lot)
         return new_lot
@@ -200,12 +255,12 @@ async def get_storage_hosts(db: AsyncSession = Depends(get_db)):
 @app.post("/pools", response_model=schema.PoolSchema)
 async def create_pool(pool: schema.PoolSchema, db: AsyncSession = Depends(get_db)):
     try:
-        pool_dict = pool.model_dump(exclude={"entries", "current_weight_kg"}, exclude_unset=True)
+        pool_dict = pool.model_dump(exclude={"entries", "current_weight_kg"}, exclude_unset=True, by_alias=False)
         new_pool = models.Pool(**pool_dict)
         db.add(new_pool)
         
         for entry in pool.entries:
-            entry_dict = entry.model_dump()
+            entry_dict = entry.model_dump(by_alias=False)
             entry_dict["pool_id"] = new_pool.id
             new_entry = models.LotPoolEntry(**entry_dict)
             db.add(new_entry)
@@ -222,7 +277,7 @@ async def get_pools(category: Optional[str] = None, recycler_id: Optional[str] =
     if category:
         query = query.where(models.Pool.category == category)
     if recycler_id:
-        query = query.where(models.Pool.target_recycler_id == recycler_id)
+        query = query.where(models.Pool.recycler_id == recycler_id)
     result = await db.execute(query)
     pools = result.scalars().all()
 
@@ -266,8 +321,26 @@ async def contribute_to_pool(pool_id: str, contribution: schema.ContributionSche
 @app.post("/transactions", response_model=schema.TransactionSchema)
 async def create_transaction(tx: schema.TransactionSchema, db: AsyncSession = Depends(get_db)):
     try:
-        new_tx = models.Transaction(**tx.model_dump(exclude_unset=True))
+        new_tx = models.Transaction(**tx.model_dump(exclude_unset=True, by_alias=False))
         db.add(new_tx)
+        lot = await db.get(models.Lot, tx.lot_id)
+        if lot is not None and (
+            tx.payment_status.lower() in {"paid", "settled"}
+            or tx.transaction_status.lower() in {"completed", "closed"}
+        ):
+            location = "Unknown"
+            if lot.latitude is not None and lot.longitude is not None:
+                location = f"{lot.latitude:.5f},{lot.longitude:.5f}"
+            db.add(models.PriceDatasetEntry(
+                material_category=lot.category,
+                material_sub_category=lot.sub_category,
+                location=location,
+                date=datetime.now(timezone.utc),
+                buying_price=tx.final_price / max(lot.approx_weight_kg, 0.001),
+                selling_price=tx.quoted_price / max(lot.approx_weight_kg, 0.001),
+                unit="per_kg",
+                recycler_id=tx.recycler_id,
+            ))
         await db.commit()
         await db.refresh(new_tx)
         return new_tx
@@ -275,14 +348,337 @@ async def create_transaction(tx: schema.TransactionSchema, db: AsyncSession = De
         await db.rollback()
         raise HTTPException(status_code=400, detail=str(e))
 
+@app.post("/logistics-requests", response_model=schema.LogisticsRequestSchema)
+async def create_logistics_request(
+    request: schema.LogisticsRequestSchema,
+    current_user: dict = Depends(get_firebase_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if str(current_user.get("phone_number", "")) == _demo_recycler_phone:
+        raise HTTPException(status_code=403, detail="Recycler accounts cannot submit collector logistics requests")
+    caller_digits = "".join(ch for ch in str(current_user.get("phone_number", "")) if ch.isdigit())[-10:]
+    request_digits = "".join(ch for ch in str(request.collector_phone or "") if ch.isdigit())[-10:]
+    if not caller_digits or caller_digits != request_digits:
+        raise HTTPException(status_code=403, detail="Logistics request must belong to the signed-in collector")
+    try:
+        existing_result = await db.execute(
+            select(models.LogisticsRequest).where(
+                models.LogisticsRequest.lot_id == request.lot_id,
+                models.LogisticsRequest.recycler_id == request.recycler_id,
+                models.LogisticsRequest.status.in_(["requested", "accepted"]),
+            )
+        )
+        row = existing_result.scalars().first()
+        values = request.model_dump(exclude_unset=True, by_alias=False)
+        if row is None:
+            row = models.LogisticsRequest(**values)
+            db.add(row)
+        await db.commit()
+        await db.refresh(row)
+        return row
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.get("/recycler-dashboard/{recycler_id}")
+async def get_recycler_dashboard(
+    recycler_id: str,
+    current_user: dict = Depends(require_demo_recycler),
+    db: AsyncSession = Depends(get_db),
+):
+    """Dashboard feed scoped to the verified Firebase recycler account."""
+    if recycler_id != current_user["recycler_id"]:
+        raise HTTPException(status_code=403, detail="Recycler profile access denied")
+    if recycler_id == "sample-recycler-indore-01":
+        count = await db.execute(
+            select(models.LogisticsRequest.request_id).where(
+                models.LogisticsRequest.recycler_id == recycler_id
+            )
+        )
+        if not count.first():
+            now = datetime.now(timezone.utc)
+            db.add_all([
+                models.LogisticsRequest(
+                    request_id="00000000-0000-4000-8000-000000001001",
+                    recycler_id=recycler_id,
+                    collector_id="00000000-0000-4000-8000-000000001101",
+                    collector_name="Ramesh Kumar",
+                    collector_phone="+91 90000 00001",
+                    collector_location="Indore, Madhya Pradesh",
+                    lot_id="00000000-0000-4000-8000-000000002001",
+                    category="OtherEwaste",
+                    sub_category="LCD Panel",
+                    approx_weight_kg=14.5,
+                    estimated_value=1160,
+                    quoted_price=1015,
+                    lot_latitude=22.7241,
+                    lot_longitude=75.8622,
+                    photo_refs=[],
+                    manifest_id="DEMO-F6-1001",
+                    status="requested",
+                    is_sample_data=True,
+                    created_at=now,
+                ),
+                models.LogisticsRequest(
+                    request_id="00000000-0000-4000-8000-000000001002",
+                    recycler_id=recycler_id,
+                    collector_id="00000000-0000-4000-8000-000000001102",
+                    collector_name="Savitri Devi",
+                    collector_phone="+91 90000 00002",
+                    collector_location="Vijay Nagar, Indore",
+                    lot_id="00000000-0000-4000-8000-000000002002",
+                    category="PCB",
+                    sub_category="Motherboard",
+                    approx_weight_kg=8.0,
+                    estimated_value=1440,
+                    quoted_price=1280,
+                    lot_latitude=22.7520,
+                    lot_longitude=75.8937,
+                    photo_refs=[],
+                    status="requested",
+                    is_sample_data=True,
+                    created_at=now,
+                ),
+            ])
+            await db.commit()
+
+    profile_result = await db.execute(
+        select(models.Recycler).where(models.Recycler.recycler_id == recycler_id)
+    )
+    recycler = profile_result.scalars().first()
+    if recycler is None and recycler_id == "sample-recycler-indore-01":
+        profile = {
+            "recyclerId": recycler_id,
+            "name": "GreenLoop Materials Recovery",
+            "facilityLat": 22.7196,
+            "facilityLng": 75.8577,
+            "materialsAccepted": ["PCB", "CRT", "Cables", "Battery", "Motor", "MixedPlastics", "OtherEwaste"],
+            "authorizationNumber": "DEMO-CCA-2026-014",
+            "authorizationStatus": "sample",
+            "contactDetails": "Contact details unavailable in presentation profile",
+            "offeredRates": {"PCB": 180, "CRT": 8, "Cables": 90, "Battery": 40, "Motor": 60, "MixedPlastics": 15},
+            "pickupAvailability": "Scheduled",
+            "serviceAreaRadiusKm": 50,
+        }
+    elif recycler is None:
+        raise HTTPException(status_code=404, detail="Recycler profile not found")
+    else:
+        profile = {
+            "recyclerId": recycler.recycler_id,
+            "name": recycler.name,
+            "facilityLat": recycler.facility_location_lat,
+            "facilityLng": recycler.facility_location_lng,
+            "materialsAccepted": recycler.materials_accepted or [],
+            "authorizationNumber": recycler.authorization_number,
+            "authorizationStatus": recycler.authorization_status,
+            "contactDetails": recycler.contact_details,
+            "offeredRates": recycler.offered_rates or {},
+            "pickupAvailability": recycler.pickup_availability,
+            "serviceAreaRadiusKm": recycler.service_area_radius_km,
+        }
+
+    request_result = await db.execute(
+        select(models.LogisticsRequest)
+        .where(models.LogisticsRequest.recycler_id == recycler_id)
+        .order_by(models.LogisticsRequest.created_at.desc())
+    )
+    requests = [{
+        "requestId": row.request_id,
+        "collectorId": row.collector_id,
+        "collectorName": row.collector_name,
+        "collectorPhone": row.collector_phone,
+        "collectorLocation": row.collector_location,
+        "lotId": row.lot_id,
+        "category": row.category,
+        "subCategory": row.sub_category,
+        "approxWeightKg": row.approx_weight_kg,
+        "estimatedValue": row.estimated_value,
+        "quotedPrice": row.quoted_price,
+        "lotLatitude": row.lot_latitude,
+        "lotLongitude": row.lot_longitude,
+        "photoRefs": row.photo_refs or [],
+        "manifestId": row.manifest_id,
+        "status": row.status,
+        "isSampleData": row.is_sample_data,
+        "createdAt": row.created_at.isoformat() if row.created_at else None,
+    } for row in request_result.scalars().all()]
+
+    ledger_rows = (await db.execute(select(models.Form6CheckpointLedger))).scalars().all()
+    manifests = []
+    for ledger in ledger_rows:
+        payload = ledger.payload or {}
+        target_id = payload.get("destination_recycler_id") or payload.get("destinationRecyclerId")
+        if target_id == recycler_id:
+            payload.setdefault("manifest_id", ledger.manifest_id)
+            manifests.append(payload)
+    if not manifests and recycler_id == "sample-recycler-indore-01":
+        manifests.append({
+            "manifestId": "DEMO-F6-1001",
+            "lotReferenceId": "00000000-0000-4000-8000-000000002001",
+            "senderName": "Ramesh Kumar",
+            "materialType": "OtherEwaste · LCD Panel",
+            "quantity": 14.5,
+            "destinationRecyclerId": recycler_id,
+            "status": "Draft for presentation",
+            "sampleData": True,
+        })
+    return {"profile": profile, "requests": requests, "manifests": manifests}
+
+@app.patch("/logistics-requests/{request_id}")
+async def decide_logistics_request(
+    request_id: str,
+    status: str = Body(..., embed=True),
+    recycler_id: str = Query(...),
+    current_user: dict = Depends(require_demo_recycler),
+    db: AsyncSession = Depends(get_db),
+):
+    if recycler_id != current_user["recycler_id"]:
+        raise HTTPException(status_code=403, detail="Recycler profile access denied")
+    if status not in {"accepted", "declined"}:
+        raise HTTPException(status_code=422, detail="Decision must be accepted or declined")
+    row = await db.get(models.LogisticsRequest, request_id)
+    if row is None or row.recycler_id != recycler_id:
+        raise HTTPException(status_code=404, detail="Request not found for this recycler")
+    row.status = status
+    await db.commit()
+    return {"requestId": row.request_id, "recyclerId": row.recycler_id, "status": row.status}
+
+@app.get("/transactions", response_model=List[schema.TransactionSchema])
+async def list_transactions(
+    collector_id: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db),
+):
+    query = select(models.Transaction).order_by(models.Transaction.created_at.desc())
+    if collector_id:
+        query = query.where(models.Transaction.collector_id == collector_id)
+    result = await db.execute(query)
+    return result.scalars().all()
+
+@app.post("/payments", response_model=schema.PaymentRecordSchema)
+async def record_payment(payment: schema.PaymentRecordSchema, db: AsyncSession = Depends(get_db)):
+    if payment.method not in {"cash", "digital"}:
+        raise HTTPException(status_code=422, detail="Payment method must be cash or digital")
+    try:
+        row = await db.get(models.PaymentRecord, payment.id)
+        values = payment.model_dump(exclude_unset=True, by_alias=False)
+        if row is None:
+            row = models.PaymentRecord(**values)
+            db.add(row)
+        else:
+            for key, value in values.items():
+                setattr(row, key, value)
+        await db.commit()
+        await db.refresh(row)
+        return row
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.get("/payments", response_model=List[schema.PaymentRecordSchema])
+async def list_payments(collector_id: str = Query(...), db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(models.PaymentRecord)
+        .where(models.PaymentRecord.collector_id == collector_id)
+        .order_by(models.PaymentRecord.recorded_at.desc())
+    )
+    return result.scalars().all()
+
 @app.post("/manifests/checkpoint", response_model=schema.Form6ManifestSchema)
 async def create_manifest(manifest: schema.Form6ManifestSchema, db: AsyncSession = Depends(get_db)):
     try:
-        new_manifest = models.DigitalForm6Manifest(**manifest.model_dump(exclude_unset=True))
-        db.add(new_manifest)
+        # Save each staged signature against the same manifest ID. The legacy
+        # manifests table depends on a finalized transaction row, which does
+        # not exist yet while the dispatch/transit/delivery flow is underway.
+        ledger_row = await db.get(
+            models.Form6CheckpointLedger, manifest.manifest_id
+        )
+        payload = manifest.model_dump(mode="json", by_alias=True)
+        if ledger_row is None:
+            ledger_row = models.Form6CheckpointLedger(
+                manifest_id=manifest.manifest_id,
+                payload=payload,
+                updated_at=datetime.now(timezone.utc),
+            )
+            db.add(ledger_row)
+        else:
+            ledger_row.payload = payload
+            ledger_row.updated_at = datetime.now(timezone.utc)
         await db.commit()
-        await db.refresh(new_manifest)
-        return new_manifest
+        return manifest
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.get("/manifests/{manifest_id}")
+async def get_form6_manifest(manifest_id: str, db: AsyncSession = Depends(get_db)):
+    """Read a stored transfer record by its unique manifest reference."""
+    row = await db.get(models.Form6CheckpointLedger, manifest_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Manifest not found")
+    return row.payload
+
+@app.get("/price-dataset")
+async def get_price_dataset(
+    material_category: Optional[str] = Query(None),
+    location: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return observed field prices, grouped with ranges and basic trends."""
+    query = select(models.PriceDatasetEntry).order_by(models.PriceDatasetEntry.date.desc())
+    if material_category:
+        query = query.where(models.PriceDatasetEntry.material_category == material_category)
+    if location:
+        query = query.where(models.PriceDatasetEntry.location.ilike(f"%{location}%"))
+    rows = (await db.execute(query)).scalars().all()
+
+    groups: dict[tuple, list] = {}
+    for row in rows:
+        key = (row.material_category, row.material_sub_category, row.location, row.unit)
+        groups.setdefault(key, []).append(row)
+
+    response = []
+    for (category, subcategory, place, unit), entries in groups.items():
+        entries.sort(key=lambda item: item.date)
+        buys = [item.buying_price for item in entries]
+        sells = [item.selling_price for item in entries]
+        latest = entries[-1]
+        previous = entries[-2] if len(entries) > 1 else None
+        trend = None
+        if previous and previous.buying_price:
+            trend = round((latest.buying_price - previous.buying_price) / previous.buying_price * 100, 2)
+        response.append({
+            "id": latest.id,
+            "materialCategory": category,
+            "materialSubCategory": subcategory,
+            "location": place,
+            "date": latest.date.isoformat(),
+            "buyingPrice": latest.buying_price,
+            "sellingPrice": latest.selling_price,
+            "unit": unit,
+            "recyclerId": latest.recycler_id,
+            "marketRangeLow": min(buys),
+            "marketRangeHigh": max(buys),
+            "offeredRangeLow": min(sells),
+            "offeredRangeHigh": max(sells),
+            "trendPercent": trend,
+            "observations": len(entries),
+            "source": "Recorded field transactions",
+        })
+    return response
+
+@app.post("/price-dataset")
+async def record_price_dataset_entry(
+    entry: schema.PriceDatasetEntrySchema,
+    db: AsyncSession = Depends(get_db),
+):
+    """Record a field-observed buying price and recycler/aggregator offer."""
+    try:
+        values = entry.model_dump(exclude_unset=True, by_alias=False)
+        row = models.PriceDatasetEntry(**values)
+        db.add(row)
+        await db.commit()
+        await db.refresh(row)
+        return schema.PriceDatasetEntrySchema.model_validate(row).model_dump(by_alias=True)
     except Exception as e:
         await db.rollback()
         raise HTTPException(status_code=400, detail=str(e))

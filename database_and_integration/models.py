@@ -100,6 +100,40 @@ class Transaction(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     closed_at = Column(DateTime, nullable=True)
 
+class PaymentRecord(Base):
+    """Optional cash or digital settlement record; independent of a payment gateway."""
+    __tablename__ = "payment_records"
+    id = Column(CHAR(36), primary_key=True)
+    lot_id = Column(CHAR(36), nullable=False)
+    collector_id = Column(CHAR(36), nullable=False)
+    recycler_id = Column(CHAR(36), nullable=True)
+    amount = Column(Float, nullable=False)
+    method = Column(String(20), nullable=False)
+    status = Column(String(20), nullable=False, default="paid")
+    recorded_at = Column(DateTime, nullable=False)
+
+class LogisticsRequest(Base):
+    __tablename__ = "logistics_requests"
+    request_id = Column(CHAR(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    recycler_id = Column(CHAR(36), nullable=False, index=True)
+    collector_id = Column(CHAR(36), nullable=True)
+    collector_name = Column(String(100), nullable=False)
+    collector_phone = Column(String(30), nullable=True)
+    collector_location = Column(String(255), nullable=True)
+    lot_id = Column(CHAR(36), nullable=False, index=True)
+    category = Column(String(50), nullable=False)
+    sub_category = Column(String(100), nullable=True)
+    approx_weight_kg = Column(Float, nullable=False)
+    estimated_value = Column(Float, nullable=True)
+    quoted_price = Column(Float, nullable=True)
+    lot_latitude = Column(Float, nullable=True)
+    lot_longitude = Column(Float, nullable=True)
+    photo_refs = Column(JSON, nullable=True)
+    manifest_id = Column(String(100), nullable=True)
+    status = Column(String(30), nullable=False, default="requested")
+    is_sample_data = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+
 class DigitalForm6Manifest(Base):
     __tablename__ = "manifests"
     manifest_id = Column(CHAR(36), ForeignKey("transactions.transaction_id"), primary_key=True)
@@ -116,6 +150,18 @@ class DigitalForm6Manifest(Base):
     checkpoint_transit = Column(JSON, nullable=True)
     checkpoint_delivery = Column(JSON, nullable=True)
     chain_hash = Column(String(255), nullable=True)
+
+class Form6CheckpointLedger(Base):
+    """Append-by-snapshot ledger for the app's staged Form-6 signature flow.
+
+    This table deliberately stores the manifest payload without requiring a
+    pre-existing transaction row, so a collector can complete a handover
+    demonstration before a recycler transaction is finalized.
+    """
+    __tablename__ = "form6_checkpoint_ledger"
+    manifest_id = Column(CHAR(36), primary_key=True)
+    payload = Column(JSON, nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
 
 class PriceDatasetEntry(Base):
     __tablename__ = "price_dataset_entries"

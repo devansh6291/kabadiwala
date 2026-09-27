@@ -65,6 +65,8 @@ class MaterialCategories {
         'Keyboard',
         'Mouse',
         'MobilePhone',
+        'LCD Panel',
+        'Magnet-bearing Assembly',
         'ScrapMetal'
       ],
     ),

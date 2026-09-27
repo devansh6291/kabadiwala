@@ -3,6 +3,7 @@ import '../models/lot.dart';
 import '../models/pool.dart';
 import '../models/recycler.dart';
 import '../models/collector_store.dart'; // Imported for collector_id
+import '../data/demo_recycler_directory.dart';
 import 'api_client.dart';
 
 /// Concrete client-side backend service communicating with the central
@@ -20,10 +21,63 @@ class BackendService {
       final list = (response.data as List<dynamic>)
           .map((item) => Recycler.fromJson(item as Map<String, dynamic>))
           .toList();
-      return list;
-    } on DioException {
-      // Graceful fallback for offline development
-      return [];
+      if (list.isNotEmpty) return list;
+      return _sampleRecyclers(category);
+    } catch (_) {
+      return _sampleRecyclers(category);
+    }
+  }
+
+  List<Recycler> _sampleRecyclers(String? category) {
+    final samples = DemoRecyclerDirectory.recyclers;
+    if (category == null) return samples;
+    return samples
+        .where((recycler) => recycler.materialsAccepted.contains(category))
+        .toList(growable: false);
+  }
+
+  Future<List<Map<String, dynamic>>> getCollectorTransactions() async {
+    try {
+      final collectorId = CollectorStore.getOrCreate().collectorId;
+      final response = await _dio.get('/transactions',
+          queryParameters: {'collector_id': collectorId});
+      return List<Map<String, dynamic>>.from(response.data);
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getCollectorPayments() async {
+    try {
+      final collectorId = CollectorStore.getOrCreate().collectorId;
+      final response = await _dio.get('/payments',
+          queryParameters: {'collector_id': collectorId});
+      return List<Map<String, dynamic>>.from(response.data);
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  Future<bool> recordPayment({
+    required String lotId,
+    required String method,
+    required double amount,
+    String? recyclerId,
+  }) async {
+    try {
+      final response = await _dio.post('/payments', data: {
+        'id': lotId,
+        'lot_id': lotId,
+        'collector_id': CollectorStore.getOrCreate().collectorId,
+        'recycler_id': recyclerId,
+        'amount': amount,
+        'method': method,
+        'status': 'paid',
+        'recorded_at': DateTime.now().toUtc().toIso8601String(),
+      });
+      return response.statusCode == 200 || response.statusCode == 201;
+    } catch (_) {
+      return false;
     }
   }
 

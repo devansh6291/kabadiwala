@@ -29,6 +29,15 @@ class DetectedItemsReviewScreen extends StatefulWidget {
 }
 
 class _DetectedItemsReviewScreenState extends State<DetectedItemsReviewScreen> {
+  static const Map<String, double> _indicativeRatesPerKg = {
+    'PCB': 180,
+    'CRT': 8,
+    'Cables': 90,
+    'Battery': 40,
+    'Motor': 60,
+    'MixedPlastics': 15,
+    'OtherEwaste': 25,
+  };
   final List<DetectedItem> _items = [];
   final List<TextEditingController> _weightControllers = [];
   bool _saving = false;
@@ -209,6 +218,8 @@ class _DetectedItemsReviewScreenState extends State<DetectedItemsReviewScreen> {
                       setState(() {
                         item.category = value;
                         item.subCategory = null;
+                        item.estimatedValue = item.estimatedWeightKg *
+                            (_indicativeRatesPerKg[value] ?? 10);
                       });
                     },
                   ),
@@ -251,6 +262,15 @@ class _DetectedItemsReviewScreenState extends State<DetectedItemsReviewScreen> {
                         const TextInputType.numberWithOptions(decimal: true),
                     decoration: const InputDecoration(
                         isDense: true, border: OutlineInputBorder()),
+                    onChanged: (text) {
+                      final weight = double.tryParse(text);
+                      if (weight == null || weight < 0) return;
+                      setState(() {
+                        item.estimatedWeightKg = weight;
+                        item.estimatedValue = weight *
+                            (_indicativeRatesPerKg[item.category] ?? 10);
+                      });
+                    },
                   ),
                 ),
                 const Spacer(),

@@ -112,15 +112,7 @@ class _RoutingResultScreenState extends State<RoutingResultScreen> {
               'The lot is saved and will route automatically once one is available.',
         );
       case RoutingOutcome.directDispatch:
-        return _statusCard(
-          icon: Icons.local_shipping,
-          color: AppColors.primaryGreen,
-          title: 'Routed directly',
-          subtitle:
-              'This lot alone meets ${result.recycler!.name}\'s minimum vehicle '
-              'capacity (${result.recycler!.minVehicleCapacityKg.toStringAsFixed(0)} kg). '
-              'Pickup will be scheduled directly.',
-        );
+        return _directDispatchCard(result);
       case RoutingOutcome.pooling:
         return _poolingCard(result, ready: false);
       case RoutingOutcome.poolReadyForPickup:
@@ -137,6 +129,15 @@ class _RoutingResultScreenState extends State<RoutingResultScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (result.isSampleData)
+          _statusCard(
+            icon: Icons.info_outline,
+            color: AppColors.primaryYellow,
+            title: 'Sample routing data',
+            subtitle:
+                'This ready pool is provided for the presentation flow; it is not a live pickup booking.',
+          ),
+        if (result.isSampleData) const SizedBox(height: 12),
         if (_declinedStorage)
           Padding(
             padding: const EdgeInsets.only(bottom: 12),
@@ -179,17 +180,7 @@ class _RoutingResultScreenState extends State<RoutingResultScreen> {
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(14)),
               ),
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => Form6SigningScreen(
-                      lot: widget.lot,
-                      recyclerId: result.recycler!.recyclerId,
-                    ),
-                  ),
-                );
-              },
+              onPressed: () => _openForm6(result.recycler!.recyclerId),
               icon: const Icon(Icons.description),
               label: const Text('Start Form-6 Handover',
                   style: TextStyle(fontWeight: FontWeight.bold)),
@@ -197,6 +188,39 @@ class _RoutingResultScreenState extends State<RoutingResultScreen> {
           ),
         ],
       ],
+    );
+  }
+
+  Widget _directDispatchCard(RoutingResult result) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _statusCard(
+          icon: Icons.local_shipping,
+          color: AppColors.primaryGreen,
+          title: 'Routed directly',
+          subtitle:
+              'This lot meets ${result.recycler!.name}\'s vehicle capacity. Review the handover checkpoints next.',
+        ),
+        const SizedBox(height: 16),
+        FilledButton.icon(
+          onPressed: () => _openForm6(result.recycler!.recyclerId),
+          icon: const Icon(Icons.description),
+          label: const Text('Continue to Form-6 Handover'),
+        ),
+      ],
+    );
+  }
+
+  void _openForm6(String recyclerId) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => Form6SigningScreen(
+          lot: widget.lot,
+          recyclerId: recyclerId,
+        ),
+      ),
     );
   }
 
@@ -223,6 +247,12 @@ class _RoutingResultScreenState extends State<RoutingResultScreen> {
           subtitle:
               '${pool.totalWeightKg.toStringAsFixed(1)} / ${pool.thresholdKg.toStringAsFixed(0)} kg '
               'toward ${result.recycler!.name}',
+        ),
+        const SizedBox(height: 16),
+        FilledButton.icon(
+          onPressed: () => _openForm6(result.recycler!.recyclerId),
+          icon: const Icon(Icons.description),
+          label: const Text('Continue to Form-6 Handover'),
         ),
       ],
     );

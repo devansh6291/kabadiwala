@@ -9,6 +9,7 @@ import '../services/sync_service.dart';
 import 'create_lot_screen.dart';
 import 'lot_history_screen.dart';
 import 'profile_screen.dart';
+import 'safety_guidance_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final String currentLanguage;
@@ -135,6 +136,14 @@ class _HomeScreenState extends State<HomeScreen> {
               subtitle: 'Language, area, contact & earnings',
               color: AppColors.primaryGreen,
               onTap: () => _openAndRefresh(const ProfileScreen()),
+            ),
+            const SizedBox(height: 14),
+            _actionCard(
+              icon: Icons.health_and_safety,
+              title: 'Safe handling · सुरक्षित हाताळणी',
+              subtitle: 'Picture-led guidance in Hindi and Marathi',
+              color: AppColors.error,
+              onTap: () => _openAndRefresh(const SafetyGuidanceScreen()),
             ),
           ],
         ),

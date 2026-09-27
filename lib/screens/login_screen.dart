@@ -20,6 +20,9 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  static const _demoRecyclerPhone = '1234567891';
+  static const _demoRecyclerOtp = '123456';
+  static const _demoRecyclerId = 'sample-recycler-indore-01';
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _ageController = TextEditingController();
@@ -112,9 +115,11 @@ class _LoginScreenState extends State<LoginScreen> {
           _otpSent = true;
           _saving = false;
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('OTP Sent!')),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(_phoneController.text.trim() == _demoRecyclerPhone
+              ? 'Firebase test OTP: $_demoRecyclerOtp'
+              : 'OTP Sent!'),
+        ));
       },
       onVerificationFailed: (FirebaseAuthException error) {
         if (!mounted) return;
@@ -168,6 +173,10 @@ class _LoginScreenState extends State<LoginScreen> {
       profile.latitude = _latitude;
       profile.longitude = _longitude;
       profile.isOnboarded = true;
+      final isDemoRecycler = _phoneController.text.trim() == _demoRecyclerPhone;
+      profile.role = isDemoRecycler ? 'recycler' : 'collector';
+      profile.recyclerId = isDemoRecycler ? _demoRecyclerId : null;
+      if (isDemoRecycler) profile.name = 'GreenLoop Materials Recovery';
 
       await CollectorStore.save(profile);
 
@@ -214,6 +223,21 @@ class _LoginScreenState extends State<LoginScreen> {
                   style: TextStyle(color: Colors.black54),
                 ),
                 const SizedBox(height: 28),
+                OutlinedButton.icon(
+                  onPressed: _saving
+                      ? null
+                      : () {
+                          setState(() {
+                            _nameController.text = 'GreenLoop Recycler';
+                            _ageController.text = '35';
+                            _phoneController.text = _demoRecyclerPhone;
+                          });
+                          _sendOtp();
+                        },
+                  icon: const Icon(Icons.factory_outlined),
+                  label: const Text('Demo recycler · 1234567891 · OTP 123456'),
+                ),
+                const SizedBox(height: 14),
                 if (!_otpSent) ...[
                   // --- PROFILE INPUT STAGE ---
                   const Text('Full name',
