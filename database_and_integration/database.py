@@ -1,5 +1,6 @@
 from typing import AsyncGenerator
 import os
+import ssl
 
 from sqlalchemy.engine import URL, make_url
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -13,8 +14,7 @@ connect_args = {}
 if database_url:
     parsed_url = make_url(database_url)
     if parsed_url.drivername in {"postgres", "postgresql"}:
-        # Supabase supplies a PostgreSQL URI; Render's free service needs the
-        # IPv4 shared session pooler and asyncpg as its SQLAlchemy driver.
+        # Accept provider PostgreSQL URIs while using the async SQLAlchemy driver.
         query = dict(parsed_url.query)
         sslmode = query.pop("sslmode", None)
         if parsed_url.drivername == "postgres":
@@ -24,6 +24,19 @@ if database_url:
         )
         if sslmode:
             connect_args["ssl"] = "require" if sslmode == "require" else sslmode
+    elif parsed_url.drivername == "mysql":
+        # Managed MySQL providers commonly provide mysql:// URIs. This app uses
+        # aiomysql; translate provider SSL options into its SSLContext argument.
+        query = dict(parsed_url.query)
+        sslmode = query.pop("ssl-mode", query.pop("sslmode", None))
+        database_url = parsed_url.set(
+            drivername="mysql+aiomysql", query=query
+        )
+        ca_pem = os.getenv("KABADIWALA_DB_SSL_CA")
+        if sslmode or ca_pem:
+            connect_args["ssl"] = ssl.create_default_context(
+                cadata=ca_pem if ca_pem else None
+            )
 else:
     db_password = os.getenv("KABADIWALA_DB_PASSWORD")
     if not db_password:

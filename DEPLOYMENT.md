@@ -1,28 +1,29 @@
 # Deployment
 
 The Flutter web app is configured for Firebase Hosting. The default
-`render.yaml` targets a $0 hobby deployment using Render's free API service and
-a free Supabase PostgreSQL database. A prior paid Render + MySQL design is no
-longer the default.
+`render.yaml` targets a $0 hobby deployment using Render's free API service
+and a free Aiven MySQL database.
 
 ## Free backend setup
 
-1. Create a free Supabase project. In its **Connect** panel, select the
-   **Session pooler** connection string for IPv4 and copy the PostgreSQL URI.
-2. Push this repository to GitHub, then create a Render Blueprint using
-   `render.yaml`. Supply the Supabase URI when Render prompts for
-   `KABADIWALA_DATABASE_URL`.
-3. Wait for the API service to deploy, then copy its HTTPS URL.
-4. Supabase runs the app's SQLAlchemy schema creation on startup. Import any
-   local records you want hosted separately; local records are not copied.
+1. Create an Aiven MySQL service on its free plan and wait until it is running.
+   From its **Overview / Connection information**, copy the MySQL URI and
+   download its CA certificate.
+2. The Git repository must be available to your Render account. If you do not
+   own the source repository, fork it to your GitHub account first. In Render,
+   create a Blueprint from your fork using `render.yaml`.
+3. Set `KABADIWALA_DATABASE_URL` to the Aiven MySQL URI. Set
+   `KABADIWALA_DB_SSL_CA` to the contents of Aiven's CA certificate.
+4. Wait for the API service to deploy, then copy its HTTPS URL. The app creates
+   its tables on startup. Local MySQL records are not copied automatically.
 
 Free-tier limits apply: Render spins its free web service down after 15 minutes
-without traffic (the next request may take about a minute to wake it), and
-Supabase's free database may pause after a week without activity and has a
-500 MB database limit. The Render free configuration disables image
+without traffic (the next request may take about a minute to wake it). Aiven's
+free MySQL service includes 1 GB RAM and 1 GB storage, and may be powered off
+after a period without activity. The Render free configuration disables image
 classification because the model's memory needs are not a reliable fit for the
 free service. [Render free limits](https://render.com/docs/free) ·
-[Supabase free limits](https://supabase.com/pricing)
+[Aiven MySQL free tier](https://aiven.io/docs/products/mysql/concepts/mysql-free-tier)
 
 ### Demo sign-in with Firebase test numbers
 

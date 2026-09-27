@@ -14,5 +14,7 @@ services:
         value: "true"
       - key: KABADIWALA_DATABASE_URL
         sync: false
+      - key: KABADIWALA_DB_SSL_CA
+        sync: false
       - key: CORS_ALLOW_ORIGINS
         value: https://kabadiwalaconnect-8c8c4.web.app
