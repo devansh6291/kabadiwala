@@ -82,7 +82,6 @@ else:
 engine_args = {"echo": True, "pool_size": 5, "max_overflow": 10}
 if connect_args:
     engine_args["connect_args"] = connect_args
-D
 engine = create_async_engine(database_url, **engine_args)
 
 AsyncSessionLocal = async_sessionmaker(
