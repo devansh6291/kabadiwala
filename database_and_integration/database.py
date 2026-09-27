@@ -1,4 +1,5 @@
 from typing import AsyncGenerator
+import base64
 import os
 import ssl
 
@@ -37,9 +38,30 @@ if database_url:
         ssl_setting = (sslmode or ssl_flag or "").lower()
         ssl_enabled = ssl_setting not in {"", "0", "false", "no", "disabled"}
         if ssl_enabled or ca_pem:
-            connect_args["ssl"] = ssl.create_default_context(
-                cadata=ca_pem if ca_pem else None
-            )
+            if not ca_pem:
+                connect_args["ssl"] = ssl.create_default_context()
+            elif os.path.isfile(ca_pem.strip()):
+                connect_args["ssl"] = ssl.create_default_context(
+                    cafile=ca_pem.strip()
+                )
+            else:
+                ca_pem = ca_pem.strip().replace("\\n", "\n")
+                if "-----BEGIN CERTIFICATE-----" not in ca_pem:
+                    try:
+                        ca_pem = base64.b64decode(ca_pem, validate=True).decode(
+                            "utf-8"
+                        )
+                    except (ValueError, UnicodeDecodeError) as error:
+                        raise RuntimeError(
+                            "KABADIWALA_DB_SSL_CA must be Aiven CA PEM contents, "
+                            "a CA file path available to the service, or base64-encoded PEM."
+                        ) from error
+                if "-----BEGIN CERTIFICATE-----" not in ca_pem:
+                    raise RuntimeError(
+                        "KABADIWALA_DB_SSL_CA does not contain a PEM certificate. "
+                        "Copy Aiven's CA certificate, including its BEGIN/END lines."
+                    )
+                connect_args["ssl"] = ssl.create_default_context(cadata=ca_pem)
 else:
     db_password = os.getenv("KABADIWALA_DB_PASSWORD")
     if not db_password:

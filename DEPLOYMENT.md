@@ -15,8 +15,10 @@ and a free Aiven MySQL database.
    create a Blueprint from your fork using `render.yaml`.
 3. Set `KABADIWALA_DATABASE_URL` to the Aiven connection URI. It can use
    `mysql://` or `mysql+aiomysql://`; include `?ssl=true` if Aiven's URI does
-   not already include an SSL option. Set `KABADIWALA_DB_SSL_CA` to the
+   not already include an SSL option. Set `KABADIWALA_DB_SSL_CA` to the PEM
    contents of Aiven's CA certificate so the connection verifies the server.
+   If Render's environment editor removes line breaks, base64-encode the PEM
+   and set the variable to that single-line value instead.
    The application converts the URL to `mysql+aiomysql` and enables TLS. Keep
    both values in Render's environment settings; do not put credentials in
    source code. URL-encode special characters in the username or password.
