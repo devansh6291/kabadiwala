@@ -18,6 +18,22 @@ enum _Stage { dispatch, transit, delivery, complete }
 const _pdfFillerFormUrl =
     'https://www.pdffiller.com/409045148-FORM-6-E-waste-Rules-2016pdf-form-6-e-waste-';
 
+class _Form6Copy {
+  final String title;
+  final String instruction;
+  final PdfColor color;
+  final PdfColor pageColor;
+  final PdfColor foreground;
+
+  const _Form6Copy({
+    required this.title,
+    required this.instruction,
+    required this.color,
+    required this.pageColor,
+    this.foreground = PdfColors.black,
+  });
+}
+
 /// Digitizes the Form-6 manifest and pushes checkpoints to the live MySQL ledger.
 class Form6SigningScreen extends StatefulWidget {
   final Lot lot;
@@ -273,54 +289,117 @@ class _Form6SigningScreenState extends State<Form6SigningScreen> {
 
   Future<void> _shareManifestPdf() async {
     final pdf = pw.Document();
+    const copies = <_Form6Copy>[
+      _Form6Copy(
+        title: 'COPY 1 · YELLOW · SENDER',
+        instruction:
+            'Retain this copy after the transporter signs. The other three copies travel with the transporter.',
+        color: PdfColor.fromInt(0xFFE0B000),
+        pageColor: PdfColor.fromInt(0xFFFFF6C7),
+      ),
+      _Form6Copy(
+        title: 'COPY 2 · BLUE · RECEIVER',
+        instruction: 'The receiver retains this copy after the transporter signs.',
+        color: PdfColor.fromInt(0xFF2878B9),
+        pageColor: PdfColor.fromInt(0xFFE3F2FD),
+        foreground: PdfColors.white,
+      ),
+      _Form6Copy(
+        title: 'COPY 3 · ORANGE · TRANSPORTER',
+        instruction: 'The transporter retains this copy after the receiver signs.',
+        color: PdfColor.fromInt(0xFFE9862B),
+        pageColor: PdfColor.fromInt(0xFFFFEBD6),
+      ),
+      _Form6Copy(
+        title: 'COPY 4 · PINK · RETURN TO SENDER',
+        instruction: 'The receiver signs this copy and returns it to the sender.',
+        color: PdfColor.fromInt(0xFFD84A83),
+        pageColor: PdfColor.fromInt(0xFFFCE4EC),
+        foreground: PdfColors.white,
+      ),
+    ];
     final checkpoints = <String, Form6Checkpoint?>{
       'Dispatch': _manifest.checkpointDispatch,
       'Transit': _manifest.checkpointTransit,
       'Recycler receipt': _manifest.checkpointDelivery,
     };
-    pdf.addPage(pw.MultiPage(
-      pageFormat: PdfPageFormat.a4,
-      build: (context) => [
-        pw.Text('E-WASTE FORM-6 HANDOVER RECORD',
-            style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
-        pw.SizedBox(height: 5),
-        pw.Text('Platform-generated handover record · Reference ${_manifest.manifestId}'),
-        pw.Divider(),
-        pw.Text('Sender / Kabadiwala: ${_manifest.senderName}'),
-        pw.Text('Sender phone: ${_manifest.senderPhone}'),
-        pw.Text('Destination recycler ID: ${_manifest.destinationRecyclerId}'),
-        pw.Text('Lot reference: ${widget.lot.id}'),
-        pw.Text('Material: ${_manifest.materialType} · ${_manifest.quantity} kg'),
-        pw.Text('Collection GPS: ${widget.lot.latitude ?? 'Not recorded'}, ${widget.lot.longitude ?? 'Not recorded'}'),
-        pw.Text('Collected at: ${widget.lot.createdAt.toIso8601String()}'),
-        pw.SizedBox(height: 12),
-        pw.Text('Transfer checkpoints', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-        ...checkpoints.entries.map((entry) {
-          final checkpoint = entry.value;
-          if (checkpoint == null) return pw.Text('${entry.key}: Not signed');
-          final signer = entry.key == 'Dispatch'
-              ? _dispatchSigner
-              : entry.key == 'Transit'
-                  ? _transitSigner
-                  : _deliverySigner;
-          return pw.Padding(
-            padding: const pw.EdgeInsets.only(top: 6),
-            child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-              pw.Text('${entry.key} · Signed by ${signer ?? 'Unknown'}'),
-              pw.Text('Time ${checkpoint.timestamp.toIso8601String()} · GPS ${checkpoint.latitude ?? '—'}, ${checkpoint.longitude ?? '—'}'),
-              pw.Text('Checkpoint hash ${checkpoint.cumulativeHash}'),
-            ]),
-          );
-        }),
-        pw.SizedBox(height: 10),
-        pw.Text('Photo references: ${_cloudPhotoRefs?.join(', ') ?? widget.lot.photoPaths.join(', ')}'),
-        pw.SizedBox(height: 18),
-        pw.Text('This file summarizes the app handover record. Review and complete any required statutory Form-6 fields and signatures before regulatory submission.'),
-      ],
-    ));
+    for (final copy in copies) {
+      pdf.addPage(pw.MultiPage(
+        pageTheme: pw.PageTheme(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.fromLTRB(38, 24, 38, 34),
+          buildBackground: (context) => pw.FullPage(
+            ignoreMargins: true,
+            child: pw.Container(color: copy.pageColor),
+          ),
+        ),
+        header: (context) => pw.Container(
+          width: double.infinity,
+          padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+          decoration: pw.BoxDecoration(
+            color: copy.color,
+            borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+          ),
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text(copy.title,
+                  style: pw.TextStyle(
+                      color: copy.foreground,
+                      fontSize: 12,
+                      fontWeight: pw.FontWeight.bold)),
+              pw.SizedBox(height: 3),
+              pw.Text(copy.instruction,
+                  style: pw.TextStyle(color: copy.foreground, fontSize: 9)),
+            ],
+          ),
+        ),
+        build: (context) => [
+          pw.SizedBox(height: 10),
+          pw.Text('E-WASTE FORM-6 HANDOVER RECORD',
+              style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
+          pw.SizedBox(height: 5),
+          pw.Text('Platform-generated handover record · Reference ${_manifest.manifestId}'),
+          pw.Divider(color: copy.color, thickness: 2),
+          pw.Text('Sender / Kabadiwala: ${_manifest.senderName}'),
+          pw.Text('Sender phone: ${_manifest.senderPhone}'),
+          pw.Text('Destination recycler ID: ${_manifest.destinationRecyclerId}'),
+          pw.Text('Lot reference: ${widget.lot.id}'),
+          pw.Text('Material: ${_manifest.materialType} · ${_manifest.quantity} kg'),
+          pw.Text('Collection GPS: ${widget.lot.latitude ?? 'Not recorded'}, ${widget.lot.longitude ?? 'Not recorded'}'),
+          pw.Text('Collected at: ${widget.lot.createdAt.toIso8601String()}'),
+          pw.SizedBox(height: 12),
+          pw.Text('Transfer checkpoints', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+          ...checkpoints.entries.map((entry) {
+            final checkpoint = entry.value;
+            if (checkpoint == null) return pw.Text('${entry.key}: Not signed');
+            final signer = entry.key == 'Dispatch'
+                ? _dispatchSigner
+                : entry.key == 'Transit'
+                    ? _transitSigner
+                    : _deliverySigner;
+            return pw.Padding(
+              padding: const pw.EdgeInsets.only(top: 6),
+              child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+                pw.Text('${entry.key} · Signed by ${signer ?? 'Unknown'}'),
+                pw.Text('Time ${checkpoint.timestamp.toIso8601String()} · GPS ${checkpoint.latitude ?? '—'}, ${checkpoint.longitude ?? '—'}'),
+                pw.Text('Checkpoint hash ${checkpoint.cumulativeHash}'),
+              ]),
+            );
+          }),
+          pw.SizedBox(height: 10),
+          pw.Text('Photo references: ${_cloudPhotoRefs?.join(', ') ?? widget.lot.photoPaths.join(', ')}'),
+          pw.SizedBox(height: 18),
+          pw.Text('This file summarizes the app handover record. Review and complete any required statutory Form-6 fields and signatures before regulatory submission.'),
+          pw.SizedBox(height: 6),
+          pw.Text('Color note: blue and pink are the requested presentation colors for copies 2 and 4. The published 2016 E-Waste Rules specify pink and green for those copies.',
+              style: const pw.TextStyle(fontSize: 8)),
+        ],
+      ));
+    }
     await Printing.sharePdf(
       bytes: await pdf.save(),
-      filename: 'Form6-${_manifest.manifestId}.pdf',
+      filename: 'Form6-${_manifest.manifestId}-4-copies.pdf',
     );
   }
 
@@ -457,7 +536,7 @@ class _Form6SigningScreenState extends State<Form6SigningScreen> {
               FilledButton.icon(
                 onPressed: _shareManifestPdf,
                 icon: const Icon(Icons.download),
-                label: const Text('Download / share Form-6 PDF'),
+                label: const Text('Download / share 4-copy Form-6 PDF'),
               ),
               OutlinedButton.icon(
                 onPressed: _openPdfFiller,

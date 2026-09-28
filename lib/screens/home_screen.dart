@@ -14,11 +14,13 @@ import 'safety_guidance_screen.dart';
 class HomeScreen extends StatefulWidget {
   final String currentLanguage;
   final ValueChanged<String?> onLanguageChanged;
+  final VoidCallback onSignOut;
 
   const HomeScreen({
     super.key,
     required this.currentLanguage,
     required this.onLanguageChanged,
+    required this.onSignOut,
   });
 
   @override
@@ -46,6 +48,27 @@ class _HomeScreenState extends State<HomeScreen> {
     await Navigator.push(
         context, MaterialPageRoute(builder: (context) => screen));
     if (mounted) setState(() {}); // Refresh local counters
+  }
+
+  Future<void> _confirmSignOut() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Sign out?'),
+        content: const Text('You can sign back in with your phone number and OTP.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Sign out'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) widget.onSignOut();
   }
 
   @override
@@ -81,6 +104,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 setState(() {});
               }
             },
+          ),
+          IconButton(
+            icon: const Icon(Icons.logout),
+            tooltip: 'Sign out',
+            onPressed: _confirmSignOut,
           ),
           DropdownButton<String>(
             value: lang,

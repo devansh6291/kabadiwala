@@ -23,6 +23,9 @@ class _LoginScreenState extends State<LoginScreen> {
   static const _demoRecyclerPhone = '1234567891';
   static const _demoRecyclerOtp = '123456';
   static const _demoRecyclerId = 'sample-recycler-indore-01';
+  static const _demoInformalCollectorOnePhone = '1234567892';
+  static const _demoInformalCollectorTwoPhone = '1234567893';
+  static const _demoCollectorOtp = '123456';
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _ageController = TextEditingController();
@@ -116,8 +119,8 @@ class _LoginScreenState extends State<LoginScreen> {
           _saving = false;
         });
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(_phoneController.text.trim() == _demoRecyclerPhone
-              ? 'Firebase test OTP: $_demoRecyclerOtp'
+          content: Text(_isDemoPhone(_phoneController.text.trim())
+              ? 'Firebase test OTP: ${_phoneController.text.trim() == _demoRecyclerPhone ? _demoRecyclerOtp : _demoCollectorOtp}'
               : 'OTP Sent!'),
         ));
       },
@@ -133,6 +136,19 @@ class _LoginScreenState extends State<LoginScreen> {
         await _finalizeLogin(credential);
       },
     );
+  }
+
+  bool _isDemoPhone(String phone) => phone == _demoRecyclerPhone ||
+      phone == _demoInformalCollectorOnePhone ||
+      phone == _demoInformalCollectorTwoPhone;
+
+  void _startDemoLogin({required String name, required String phone}) {
+    setState(() {
+      _nameController.text = name;
+      _ageController.text = '35';
+      _phoneController.text = phone;
+    });
+    _sendOtp();
   }
 
   Future<void> _verifyOtp() async {
@@ -226,16 +242,34 @@ class _LoginScreenState extends State<LoginScreen> {
                 OutlinedButton.icon(
                   onPressed: _saving
                       ? null
-                      : () {
-                          setState(() {
-                            _nameController.text = 'GreenLoop Recycler';
-                            _ageController.text = '35';
-                            _phoneController.text = _demoRecyclerPhone;
-                          });
-                          _sendOtp();
-                        },
+                      : () => _startDemoLogin(
+                            name: 'GreenLoop Recycler',
+                            phone: _demoRecyclerPhone,
+                          ),
                   icon: const Icon(Icons.factory_outlined),
-                  label: const Text('Demo recycler · 1234567891 · OTP 123456'),
+                  label: const Text('Recycler dashboard · 1234567891 · OTP 123456'),
+                ),
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: _saving
+                      ? null
+                      : () => _startDemoLogin(
+                            name: 'Informal Recycler One',
+                            phone: _demoInformalCollectorOnePhone,
+                          ),
+                  icon: const Icon(Icons.person_outline),
+                  label: const Text('Informal recycler / collector · 1234567892 · OTP 123456'),
+                ),
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: _saving
+                      ? null
+                      : () => _startDemoLogin(
+                            name: 'Informal Recycler Two',
+                            phone: _demoInformalCollectorTwoPhone,
+                          ),
+                  icon: const Icon(Icons.person_outline),
+                  label: const Text('Informal recycler / collector · 1234567893 · OTP 123456'),
                 ),
                 const SizedBox(height: 14),
                 if (!_otpSent) ...[

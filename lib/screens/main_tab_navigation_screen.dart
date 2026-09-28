@@ -10,11 +10,13 @@ import 'market_news_screen.dart';
 class MainTabNavigationScreen extends StatefulWidget {
   final String currentLanguage;
   final ValueChanged<String?> onLanguageChanged;
+  final VoidCallback onSignOut;
 
   const MainTabNavigationScreen({
     super.key,
     required this.currentLanguage,
     required this.onLanguageChanged,
+    required this.onSignOut,
   });
 
   @override
@@ -31,6 +33,7 @@ class _MainTabNavigationScreenState extends State<MainTabNavigationScreen> {
       HomeScreen(
         currentLanguage: widget.currentLanguage,
         onLanguageChanged: widget.onLanguageChanged,
+        onSignOut: widget.onSignOut,
       ),
       const RecyclerDataScreen(),
       const NearbyKabadiwalasScreen(),

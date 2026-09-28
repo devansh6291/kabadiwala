@@ -46,6 +46,7 @@ class _MyAppState extends State<MyApp> {
   }
 
   Future<void> _onSignOut() async {
+    await FirebaseService().signOut();
     final profile = CollectorStore.getOrCreate();
     profile.isOnboarded = false;
     profile.role = 'collector';
@@ -89,6 +90,7 @@ class _MyAppState extends State<MyApp> {
               : MainTabNavigationScreen(
               currentLanguage: currentLanguage,
               onLanguageChanged: changeLanguage,
+              onSignOut: _onSignOut,
             )
           : LoginScreen(onComplete: _onLoginComplete),
     );

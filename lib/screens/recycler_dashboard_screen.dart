@@ -3,7 +3,6 @@ import 'package:url_launcher/url_launcher.dart';
 import '../app_colors.dart';
 import '../models/lot.dart';
 import '../services/api_client.dart';
-import '../services/firebase_service.dart';
 import 'form6_signing_screen.dart';
 
 class RecyclerDashboardScreen extends StatefulWidget {
@@ -169,10 +168,7 @@ class _RecyclerDashboardScreenState extends State<RecyclerDashboardScreen> {
           ),
           IconButton(
             tooltip: 'Sign out',
-            onPressed: () async {
-              await FirebaseService().signOut();
-              widget.onSignOut();
-            },
+            onPressed: widget.onSignOut,
             icon: const Icon(Icons.logout),
           ),
         ],
