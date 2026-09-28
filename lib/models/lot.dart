@@ -50,6 +50,16 @@ class Lot {
   String? paymentMethod;
   bool paymentSynced;
 
+  /// Stable ID shared by the local lot, payment record, and its QR.
+  String? transactionId;
+  DateTime? paymentRecordedAt;
+
+  /// Recycler profile as it was when the lot was routed; embedded in its QR.
+  Map<String, dynamic>? recyclerSnapshot;
+
+  /// Null for older records; set to failed/routed by the matching flow.
+  String? routingStatus;
+
   Lot({
     required this.id,
     required this.category,
@@ -67,6 +77,10 @@ class Lot {
     this.paymentStatus = 'pending',
     this.paymentMethod,
     this.paymentSynced = false,
+    this.transactionId,
+    this.paymentRecordedAt,
+    this.recyclerSnapshot,
+    this.routingStatus,
   });
 
   Lot copyWith({
@@ -84,6 +98,10 @@ class Lot {
     String? paymentStatus,
     String? paymentMethod,
     bool? paymentSynced,
+    String? transactionId,
+    DateTime? paymentRecordedAt,
+    Map<String, dynamic>? recyclerSnapshot,
+    String? routingStatus,
   }) {
     return Lot(
       id: id,
@@ -102,6 +120,10 @@ class Lot {
       paymentStatus: paymentStatus ?? this.paymentStatus,
       paymentMethod: paymentMethod ?? this.paymentMethod,
       paymentSynced: paymentSynced ?? this.paymentSynced,
+      transactionId: transactionId ?? this.transactionId,
+      paymentRecordedAt: paymentRecordedAt ?? this.paymentRecordedAt,
+      recyclerSnapshot: recyclerSnapshot ?? this.recyclerSnapshot,
+      routingStatus: routingStatus ?? this.routingStatus,
     );
   }
 
@@ -127,6 +149,10 @@ class Lot {
         'paymentStatus': paymentStatus,
         'paymentMethod': paymentMethod,
         'paymentSynced': paymentSynced,
+        'transactionId': transactionId,
+        'paymentRecordedAt': paymentRecordedAt,
+        'recyclerSnapshot': recyclerSnapshot,
+        'routingStatus': routingStatus,
       };
 
   factory Lot.fromJson(Map<String, dynamic> json) => Lot(
@@ -146,5 +172,11 @@ class Lot {
         paymentStatus: json['paymentStatus'] as String? ?? 'pending',
         paymentMethod: json['paymentMethod'] as String?,
         paymentSynced: json['paymentSynced'] as bool? ?? false,
+        transactionId: json['transactionId'] as String?,
+        paymentRecordedAt: json['paymentRecordedAt'] as DateTime?,
+        recyclerSnapshot: (json['recyclerSnapshot'] as Map?)?.map(
+          (key, value) => MapEntry(key.toString(), value),
+        ),
+        routingStatus: json['routingStatus'] as String?,
       );
 }

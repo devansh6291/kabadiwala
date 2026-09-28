@@ -63,8 +63,9 @@ class _NearbyKabadiwalasScreenState extends State<NearbyKabadiwalasScreen> {
 
       if (pos == null) {
         setState(() {
-          _places = _samplePlaces;
-          _showingSamples = true;
+          _places = [];
+          _showingSamples = false;
+          _error = LocationService.lastError ?? 'Location is unavailable. Allow location access and retry.';
           _isLoading = false;
         });
         return;

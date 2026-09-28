@@ -12,6 +12,7 @@ import '../services/crypto_service.dart';
 import '../services/location_service.dart';
 import '../services/api_client.dart';
 import '../services/firebase_service.dart';
+import '../widgets/transaction_qr_button.dart';
 
 enum _Stage { dispatch, transit, delivery, complete }
 
@@ -41,7 +42,10 @@ class Form6SigningScreen extends StatefulWidget {
   final Map<String, dynamic>? initialManifestData;
 
   const Form6SigningScreen(
-      {super.key, required this.lot, required this.recyclerId, this.initialManifestData});
+      {super.key,
+      required this.lot,
+      required this.recyclerId,
+      this.initialManifestData});
 
   @override
   State<Form6SigningScreen> createState() => _Form6SigningScreenState();
@@ -54,6 +58,7 @@ class _Form6SigningScreenState extends State<Form6SigningScreen> {
   late _Stage _stage;
   bool _signing = false;
   bool _cloudLedgerUnavailable = false;
+  bool _retryingCloudSync = false;
   String? _dispatchSigner;
   String? _transitSigner;
   String? _deliverySigner;
@@ -68,9 +73,12 @@ class _Form6SigningScreenState extends State<Form6SigningScreen> {
     if (initial != null) {
       _manifest = Form6Manifest.fromJson(initial);
       _manifest.destinationRecyclerId = widget.recyclerId;
-      _dispatchSigner = _signerFrom(initial, 'checkpoint_dispatch', 'checkpointDispatch');
-      _transitSigner = _signerFrom(initial, 'checkpoint_transit', 'checkpointTransit');
-      _deliverySigner = _signerFrom(initial, 'checkpoint_delivery', 'checkpointDelivery');
+      _dispatchSigner =
+          _signerFrom(initial, 'checkpoint_dispatch', 'checkpointDispatch');
+      _transitSigner =
+          _signerFrom(initial, 'checkpoint_transit', 'checkpointTransit');
+      _deliverySigner =
+          _signerFrom(initial, 'checkpoint_delivery', 'checkpointDelivery');
       _stage = _manifest.checkpointDelivery != null
           ? _Stage.complete
           : _manifest.checkpointTransit != null
@@ -95,7 +103,8 @@ class _Form6SigningScreenState extends State<Form6SigningScreen> {
   String? _signerFrom(Map<String, dynamic> data, String snake, String camel) {
     final checkpoint = data[snake] ?? data[camel];
     if (checkpoint is Map) {
-      return (checkpoint['signer_name'] ?? checkpoint['signerName'])?.toString();
+      return (checkpoint['signer_name'] ?? checkpoint['signerName'])
+          ?.toString();
     }
     return null;
   }
@@ -131,8 +140,8 @@ class _Form6SigningScreenState extends State<Form6SigningScreen> {
     setState(() => _signing = true);
 
     try {
-      final position = await LocationService.getCurrentPosition()
-          .catchError((_) => null);
+      final position =
+          await LocationService.getCurrentPosition().catchError((_) => null);
       final now = DateTime.now();
 
       final signatureHash =
@@ -197,7 +206,9 @@ class _Form6SigningScreenState extends State<Form6SigningScreen> {
         else if (_stage == _Stage.delivery) _stage = _Stage.complete;
 
         _signing = false;
-        _cloudLedgerUnavailable = _cloudLedgerUnavailable || !synced;
+        // Each request posts the complete manifest snapshot. A later successful
+        // checkpoint therefore also repairs any earlier failed checkpoint sync.
+        _cloudLedgerUnavailable = !synced;
         _nameController.clear();
       });
       if (!synced && mounted) {
@@ -218,11 +229,13 @@ class _Form6SigningScreenState extends State<Form6SigningScreen> {
   }
 
   Future<void> _pushManifestToLedger() async {
-    _cloudPhotoRefs ??= await Future.wait(widget.lot.photoPaths.map((path) async {
-      if (path.startsWith('http://') || path.startsWith('https://')) return path;
+    _cloudPhotoRefs ??=
+        await Future.wait(widget.lot.photoPaths.map((path) async {
+      if (path.startsWith('http://') || path.startsWith('https://'))
+        return path;
       try {
-        return await FirebaseService().uploadLotPhoto(
-            lotId: widget.lot.id, localPath: path);
+        return await FirebaseService()
+            .uploadLotPhoto(lotId: widget.lot.id, localPath: path);
       } catch (_) {
         return path;
       }
@@ -287,6 +300,81 @@ class _Form6SigningScreenState extends State<Form6SigningScreen> {
     }
   }
 
+  Future<void> _retryCloudSync() async {
+    setState(() => _retryingCloudSync = true);
+    try {
+      await _pushManifestToLedger();
+      if (!mounted) return;
+      setState(() {
+        _cloudLedgerUnavailable = false;
+        _retryingCloudSync = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Form-6 checkpoints synced to the cloud ledger.')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _retryingCloudSync = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Cloud sync still unavailable: $error')),
+      );
+    }
+  }
+
+  Map<String, dynamic> _manifestQrPayload() {
+    Map<String, dynamic>? checkpoint(Form6Checkpoint? point, String? signer) {
+      if (point == null) return null;
+      return {
+        'signerName': signer,
+        'signatureHash': point.signatureHash,
+        'timestamp': point.timestamp.toUtc().toIso8601String(),
+        'latitude': point.latitude,
+        'longitude': point.longitude,
+        'cumulativeHash': point.cumulativeHash,
+      };
+    }
+
+    final collector = CollectorStore.getOrCreate();
+    return {
+      'schema': 'kabadiwala.form6-transaction.v1',
+      'transactionId': widget.lot.transactionId ?? _manifest.manifestId,
+      'manifestId': _manifest.manifestId,
+      'lotId': widget.lot.id,
+      'sender': {
+        'name': _manifest.senderName,
+        'phone': _manifest.senderPhone,
+        'collectorId': collector.collectorId,
+      },
+      'transporter': {
+        'dispatchSigner': _dispatchSigner,
+        'transitSigner': _transitSigner,
+      },
+      'receiver': {
+        'recyclerId': _manifest.destinationRecyclerId,
+        'signer': _deliverySigner,
+      },
+      'material': {
+        'category': _manifest.materialType,
+        'subCategory': widget.lot.subCategory,
+        'weightKg': _manifest.quantity,
+        'photoReferences': _cloudPhotoRefs ?? widget.lot.photoPaths,
+      },
+      'collection': {
+        'createdAt': widget.lot.createdAt.toUtc().toIso8601String(),
+        'latitude': widget.lot.latitude,
+        'longitude': widget.lot.longitude,
+      },
+      'checkpoints': {
+        'dispatch': checkpoint(_manifest.checkpointDispatch, _dispatchSigner),
+        'transit': checkpoint(_manifest.checkpointTransit, _transitSigner),
+        'delivery': checkpoint(_manifest.checkpointDelivery, _deliverySigner),
+      },
+      'chainHash': _manifest.chainHash,
+      'cloudLedgerSynced': !_cloudLedgerUnavailable,
+    };
+  }
+
   Future<void> _shareManifestPdf() async {
     final pdf = pw.Document();
     const copies = <_Form6Copy>[
@@ -299,20 +387,23 @@ class _Form6SigningScreenState extends State<Form6SigningScreen> {
       ),
       _Form6Copy(
         title: 'COPY 2 · BLUE · RECEIVER',
-        instruction: 'The receiver retains this copy after the transporter signs.',
+        instruction:
+            'The receiver retains this copy after the transporter signs.',
         color: PdfColor.fromInt(0xFF2878B9),
         pageColor: PdfColor.fromInt(0xFFE3F2FD),
         foreground: PdfColors.white,
       ),
       _Form6Copy(
         title: 'COPY 3 · ORANGE · TRANSPORTER',
-        instruction: 'The transporter retains this copy after the receiver signs.',
+        instruction:
+            'The transporter retains this copy after the receiver signs.',
         color: PdfColor.fromInt(0xFFE9862B),
         pageColor: PdfColor.fromInt(0xFFFFEBD6),
       ),
       _Form6Copy(
         title: 'COPY 4 · PINK · RETURN TO SENDER',
-        instruction: 'The receiver signs this copy and returns it to the sender.',
+        instruction:
+            'The receiver signs this copy and returns it to the sender.',
         color: PdfColor.fromInt(0xFFD84A83),
         pageColor: PdfColor.fromInt(0xFFFCE4EC),
         foreground: PdfColors.white,
@@ -357,19 +448,25 @@ class _Form6SigningScreenState extends State<Form6SigningScreen> {
         build: (context) => [
           pw.SizedBox(height: 10),
           pw.Text('E-WASTE FORM-6 HANDOVER RECORD',
-              style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
+              style:
+                  pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
           pw.SizedBox(height: 5),
-          pw.Text('Platform-generated handover record · Reference ${_manifest.manifestId}'),
+          pw.Text(
+              'Platform-generated handover record · Reference ${_manifest.manifestId}'),
           pw.Divider(color: copy.color, thickness: 2),
           pw.Text('Sender / Kabadiwala: ${_manifest.senderName}'),
           pw.Text('Sender phone: ${_manifest.senderPhone}'),
-          pw.Text('Destination recycler ID: ${_manifest.destinationRecyclerId}'),
+          pw.Text(
+              'Destination recycler ID: ${_manifest.destinationRecyclerId}'),
           pw.Text('Lot reference: ${widget.lot.id}'),
-          pw.Text('Material: ${_manifest.materialType} · ${_manifest.quantity} kg'),
-          pw.Text('Collection GPS: ${widget.lot.latitude ?? 'Not recorded'}, ${widget.lot.longitude ?? 'Not recorded'}'),
+          pw.Text(
+              'Material: ${_manifest.materialType} · ${_manifest.quantity} kg'),
+          pw.Text(
+              'Collection GPS: ${widget.lot.latitude ?? 'Not recorded'}, ${widget.lot.longitude ?? 'Not recorded'}'),
           pw.Text('Collected at: ${widget.lot.createdAt.toIso8601String()}'),
           pw.SizedBox(height: 12),
-          pw.Text('Transfer checkpoints', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+          pw.Text('Transfer checkpoints',
+              style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
           ...checkpoints.entries.map((entry) {
             final checkpoint = entry.value;
             if (checkpoint == null) return pw.Text('${entry.key}: Not signed');
@@ -380,19 +477,25 @@ class _Form6SigningScreenState extends State<Form6SigningScreen> {
                     : _deliverySigner;
             return pw.Padding(
               padding: const pw.EdgeInsets.only(top: 6),
-              child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-                pw.Text('${entry.key} · Signed by ${signer ?? 'Unknown'}'),
-                pw.Text('Time ${checkpoint.timestamp.toIso8601String()} · GPS ${checkpoint.latitude ?? '—'}, ${checkpoint.longitude ?? '—'}'),
-                pw.Text('Checkpoint hash ${checkpoint.cumulativeHash}'),
-              ]),
+              child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text('${entry.key} · Signed by ${signer ?? 'Unknown'}'),
+                    pw.Text(
+                        'Time ${checkpoint.timestamp.toIso8601String()} · GPS ${checkpoint.latitude ?? '—'}, ${checkpoint.longitude ?? '—'}'),
+                    pw.Text('Checkpoint hash ${checkpoint.cumulativeHash}'),
+                  ]),
             );
           }),
           pw.SizedBox(height: 10),
-          pw.Text('Photo references: ${_cloudPhotoRefs?.join(', ') ?? widget.lot.photoPaths.join(', ')}'),
+          pw.Text(
+              'Photo references: ${_cloudPhotoRefs?.join(', ') ?? widget.lot.photoPaths.join(', ')}'),
           pw.SizedBox(height: 18),
-          pw.Text('This file summarizes the app handover record. Review and complete any required statutory Form-6 fields and signatures before regulatory submission.'),
+          pw.Text(
+              'This file summarizes the app handover record. Review and complete any required statutory Form-6 fields and signatures before regulatory submission.'),
           pw.SizedBox(height: 6),
-          pw.Text('Color note: blue and pink are the requested presentation colors for copies 2 and 4. The published 2016 E-Waste Rules specify pink and green for those copies.',
+          pw.Text(
+              'Color note: blue and pink are the requested presentation colors for copies 2 and 4. The published 2016 E-Waste Rules specify pink and green for those copies.',
               style: const pw.TextStyle(fontSize: 8)),
         ],
       ));
@@ -445,10 +548,24 @@ class _Form6SigningScreenState extends State<Form6SigningScreen> {
                 AppColors.pending,
               ),
             if (_cloudLedgerUnavailable)
-              _workflowNotice(
-                'Cloud ledger unavailable. Checkpoint sync did not complete.',
-                AppColors.error,
-              ),
+              Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                _workflowNotice(
+                  'Cloud ledger unavailable. Checkpoint sync did not complete. The signed checkpoints remain visible in this screen; retry when the connection is available.',
+                  AppColors.error,
+                ),
+                TextButton.icon(
+                  onPressed: _retryingCloudSync ? null : _retryCloudSync,
+                  icon: _retryingCloudSync
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.sync),
+                  label: Text(_retryingCloudSync
+                      ? 'Retrying cloud sync…'
+                      : 'Retry cloud sync'),
+                ),
+              ]),
             if (widget.recyclerId.startsWith('sample-recycler-') ||
                 _cloudLedgerUnavailable)
               const SizedBox(height: 12),
@@ -532,6 +649,13 @@ class _Form6SigningScreenState extends State<Form6SigningScreen> {
                 ),
               ),
             if (_stage == _Stage.complete) ...[
+              FilledButton.tonalIcon(
+                onPressed: () =>
+                    TransactionQrButton.show(context, _manifestQrPayload()),
+                icon: const Icon(Icons.qr_code_2),
+                label: const Text('View Form-6 transaction QR'),
+              ),
+              const SizedBox(height: 8),
               const SizedBox(height: 12),
               FilledButton.icon(
                 onPressed: _shareManifestPdf,

@@ -28,9 +28,11 @@ class ApiClient {
     dio = Dio(
       BaseOptions(
         baseUrl: defaultBaseUrl,
-        connectTimeout: const Duration(seconds: 5),
-        receiveTimeout: const Duration(seconds: 15),
-        sendTimeout: const Duration(seconds: 15),
+        // Free API hosts can take several seconds to wake from idle before
+        // the first request. Allow the cold-start response to arrive.
+        connectTimeout: const Duration(seconds: 45),
+        receiveTimeout: const Duration(seconds: 45),
+        sendTimeout: const Duration(seconds: 30),
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/json',
@@ -74,8 +76,10 @@ class ApiClient {
               candidate = 'http://10.77.222.41:8000';
             }
 
-            if (candidate != null && !error.requestOptions.extra.containsKey('retried')) {
-              debugPrint('[DIO] Retrying request on alternative host: $candidate');
+            if (candidate != null &&
+                !error.requestOptions.extra.containsKey('retried')) {
+              debugPrint(
+                  '[DIO] Retrying request on alternative host: $candidate');
               final options = error.requestOptions;
               options.baseUrl = candidate;
               options.extra['retried'] = true;

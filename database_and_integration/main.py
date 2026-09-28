@@ -73,6 +73,13 @@ app.add_middleware(
         for origin in os.getenv("CORS_ALLOW_ORIGINS", "*").split(",")
         if origin.strip()
     ],
+    # Flutter web development uses a random localhost port. Firebase Hosting
+    # can be opened on either default project domain (or a preview channel).
+    # Keep custom production domains explicit in CORS_ALLOW_ORIGINS.
+    allow_origin_regex=(
+        r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$"
+        r"|^https://kabadiwalaconnect-8c8c4(--[a-z0-9-]+)?\.(web\.app|firebaseapp\.com)$"
+    ),
     allow_methods=["*"],
     allow_headers=["*"],
 )

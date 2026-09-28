@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import '../models/lot.dart';
+import '../models/lot_store.dart';
 import '../models/pool.dart';
 import '../models/recycler.dart';
 import '../models/storage_host.dart';
@@ -40,10 +41,25 @@ class RecyclerMatchingService {
     final dio = ApiClient().dio;
 
     try {
-      // 1. Get exact GPS (Fallback to Indore center if denied)
-      final pos = await LocationService.getCurrentPosition();
-      final lat = pos?.latitude ?? 22.7196;
-      final lng = pos?.longitude ?? 75.8577;
+      // Use the location captured for this lot. Never substitute a made-up
+      // city coordinate when location access is unavailable.
+      final profile = CollectorStore.getOrCreate();
+      final pos = lot.latitude == null || lot.longitude == null
+          ? await LocationService.getCurrentPosition()
+          : null;
+      final lat = lot.latitude ?? pos?.latitude ?? profile.latitude;
+      final lng = lot.longitude ?? pos?.longitude ?? profile.longitude;
+      if (lat == null || lng == null) {
+        debugPrint(
+            '[ROUTING] Missing collection location: ${LocationService.lastError}');
+        await LotStore.updateLot(lot.copyWith(routingStatus: 'failed'));
+        return const RoutingResult(outcome: RoutingOutcome.noRecyclerAvailable);
+      }
+      if (lot.latitude == null || lot.longitude == null) {
+        lot.latitude = lat;
+        lot.longitude = lng;
+        await LotStore.updateLot(lot);
+      }
 
       // 2. Query Python backend for nearby authorized recyclers
       final recyclerRes = await dio.get(
@@ -58,15 +74,15 @@ class RecyclerMatchingService {
 
       final List<dynamic> recyclerData = recyclerRes.data;
       if (recyclerData.isEmpty) {
-        return _readySampleRoute(lot);
+        return await _readySampleRoute(lot);
       }
 
       final candidates = recyclerData
           .map((j) => Recycler.fromJson(j))
-          .where((recycler) => recycler.materialsAccepted
-              .any((material) => material.toLowerCase() == lot.category.toLowerCase()))
+          .where((recycler) => recycler.materialsAccepted.any((material) =>
+              material.toLowerCase() == lot.category.toLowerCase()))
           .toList();
-      if (candidates.isEmpty) return _readySampleRoute(lot);
+      if (candidates.isEmpty) return await _readySampleRoute(lot);
 
       // Sort by best offered rate for the material
       candidates.sort((a, b) {
@@ -79,11 +95,13 @@ class RecyclerMatchingService {
         if (relativeRateGap >= 0.10) return rateB.compareTo(rateA);
         int availability(String value) {
           final normalized = value.toLowerCase();
-          if (normalized.contains('immediate') || normalized.contains('same')) return 0;
+          if (normalized.contains('immediate') || normalized.contains('same'))
+            return 0;
           if (normalized.contains('scheduled')) return 1;
           if (normalized.contains('none')) return 2;
           return 1;
         }
+
         final byAvailability = availability(a.pickupAvailability)
             .compareTo(availability(b.pickupAvailability));
         if (byAvailability != 0) return byAvailability;
@@ -91,6 +109,11 @@ class RecyclerMatchingService {
             .compareTo(b.distanceKm ?? double.infinity);
       });
       final bestRecycler = candidates.first;
+      await LotStore.updateLot(lot.copyWith(
+        recyclerId: bestRecycler.recyclerId,
+        recyclerSnapshot: bestRecycler.toJson(),
+        routingStatus: 'routed',
+      ));
 
       // Make a logistics request visible in the matched recycler's inbox.
       // This is best-effort and never blocks the collector's offline flow.
@@ -99,7 +122,8 @@ class RecyclerMatchingService {
         await dio.post('/logistics-requests', data: {
           'recyclerId': bestRecycler.recyclerId,
           'collectorId': collector.collectorId,
-          'collectorName': collector.name.isEmpty ? 'Collector' : collector.name,
+          'collectorName':
+              collector.name.isEmpty ? 'Collector' : collector.name,
           'collectorPhone': collector.phoneNumber,
           'collectorLocation': collector.operatingLocation,
           'lotId': lot.id,
@@ -141,16 +165,15 @@ class RecyclerMatchingService {
               p.status == PoolStatus.readyForPickup)
           .toList();
 
-      final existingWeight = activePools.isEmpty
-          ? 0.0
-          : activePools.first.totalWeightKg;
+      final existingWeight =
+          activePools.isEmpty ? 0.0 : activePools.first.totalWeightKg;
       final requiredWeight = activePools.isEmpty
           ? bestRecycler.minVehicleCapacityKg
           : activePools.first.thresholdKg;
       if (existingWeight + lot.approxWeightKg < requiredWeight) {
         // Keep the real collecting pool untouched while still allowing a
         // complete, clearly identified walkthrough on an underfilled lot.
-        return _readySampleRoute(lot);
+        return await _readySampleRoute(lot);
       }
 
       Pool targetPool;
@@ -226,15 +249,20 @@ class RecyclerMatchingService {
       );
     } catch (e) {
       debugPrint('[ROUTING ERROR] $e');
-      return _readySampleRoute(lot);
+      return await _readySampleRoute(lot);
     }
   }
 
-  static RoutingResult _readySampleRoute(Lot lot) {
+  static Future<RoutingResult> _readySampleRoute(Lot lot) async {
     final matchingSamples = DemoRecyclerDirectory.forMaterial(lot.category);
     final recycler = matchingSamples.isNotEmpty
         ? matchingSamples.first
         : DemoRecyclerDirectory.recyclers.first;
+    await LotStore.updateLot(lot.copyWith(
+      recyclerId: recycler.recyclerId,
+      recyclerSnapshot: recycler.toJson(),
+      routingStatus: 'routed',
+    ));
     final weight = lot.approxWeightKg > 0 ? lot.approxWeightKg : 0.1;
     final pool = Pool(
       id: 'sample-pool-${lot.id}',

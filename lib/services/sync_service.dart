@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:uuid/uuid.dart';
 import '../models/lot.dart';
 import '../models/lot_store.dart';
 import '../models/collector_store.dart';
@@ -49,10 +50,18 @@ class SyncService {
           }
         }
         if (lot.paymentStatus == 'paid' && !lot.paymentSynced) {
+          final transactionId = lot.transactionId ?? const Uuid().v4();
+          final recordedAt = lot.paymentRecordedAt ?? lot.createdAt;
+          updated = updated.copyWith(
+            transactionId: transactionId,
+            paymentRecordedAt: recordedAt,
+          );
           final paymentSynced = await BackendService().recordPayment(
             lotId: lot.id,
+            transactionId: transactionId,
             method: lot.paymentMethod ?? 'cash',
             amount: lot.finalSaleValue ?? 0,
+            recordedAt: recordedAt,
             recyclerId: lot.recyclerId,
           );
           updated = updated.copyWith(paymentSynced: paymentSynced);

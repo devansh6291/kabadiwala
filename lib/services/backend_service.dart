@@ -60,20 +60,22 @@ class BackendService {
 
   Future<bool> recordPayment({
     required String lotId,
+    required String transactionId,
     required String method,
     required double amount,
+    required DateTime recordedAt,
     String? recyclerId,
   }) async {
     try {
       final response = await _dio.post('/payments', data: {
-        'id': lotId,
+        'id': transactionId,
         'lot_id': lotId,
         'collector_id': CollectorStore.getOrCreate().collectorId,
         'recycler_id': recyclerId,
         'amount': amount,
         'method': method,
         'status': 'paid',
-        'recorded_at': DateTime.now().toUtc().toIso8601String(),
+        'recorded_at': recordedAt.toUtc().toIso8601String(),
       });
       return response.statusCode == 200 || response.statusCode == 201;
     } catch (_) {

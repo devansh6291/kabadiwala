@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../app_colors.dart';
 import '../models/lot.dart';
 import '../models/lot_store.dart';
+import 'routing_result_screen.dart';
 import '../widgets/lot_photo_image.dart';
 
 class LotHistoryScreen extends StatefulWidget {
@@ -43,6 +44,7 @@ class _LotHistoryScreenState extends State<LotHistoryScreen> {
                 itemBuilder: (context, index) => _LotCard(
                   lot: lots[index],
                   dateFormat: _dateFormat,
+                  onChanged: () => setState(() {}),
                 ),
               ),
             ),
@@ -53,8 +55,10 @@ class _LotHistoryScreenState extends State<LotHistoryScreen> {
 class _LotCard extends StatelessWidget {
   final Lot lot;
   final DateFormat dateFormat;
+  final VoidCallback onChanged;
 
-  const _LotCard({required this.lot, required this.dateFormat});
+  const _LotCard(
+      {required this.lot, required this.dateFormat, required this.onChanged});
 
   @override
   Widget build(BuildContext context) {
@@ -102,6 +106,23 @@ class _LotCard extends StatelessWidget {
                     dateFormat.format(lot.createdAt),
                     style: const TextStyle(fontSize: 12, color: Colors.black45),
                   ),
+                  if (lot.syncStatus == 'failed' &&
+                      lot.routingStatus != 'routed') ...[
+                    const SizedBox(height: 8),
+                    OutlinedButton.icon(
+                      onPressed: () async {
+                        await Navigator.push<void>(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => RoutingResultScreen(lot: lot),
+                          ),
+                        );
+                        onChanged();
+                      },
+                      icon: const Icon(Icons.alt_route),
+                      label: const Text('Retry routing'),
+                    ),
+                  ],
                 ],
               ),
             ),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -58,13 +59,14 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _autoDetectLocation() async {
+    if (mounted) setState(() => _locating = true);
     final position = await LocationService.getCurrentPosition();
     if (!mounted) return;
 
     if (position == null) {
       setState(() {
         _locating = false;
-        _locationLabel = 'Location unavailable — you can add it later.';
+        _locationLabel = LocationService.lastError ?? 'Location unavailable — you can add it later.';
       });
       return;
     }
@@ -73,6 +75,7 @@ class _LoginScreenState extends State<LoginScreen> {
     _longitude = position.longitude;
 
     try {
+      if (kIsWeb) throw UnsupportedError('Browser uses coordinates as its location label.');
       final placemarks = await Geocoding()
           .placemarkFromCoordinates(position.latitude, position.longitude);
       if (placemarks.isNotEmpty) {
@@ -391,6 +394,12 @@ class _LoginScreenState extends State<LoginScreen> {
                             width: 14,
                             height: 14,
                             child: CircularProgressIndicator(strokeWidth: 2)),
+                      if (!_locating && (_latitude == null || _longitude == null))
+                        IconButton(
+                          tooltip: 'Retry location',
+                          onPressed: _autoDetectLocation,
+                          icon: const Icon(Icons.refresh, color: AppColors.primaryGreen),
+                        ),
                     ],
                   ),
                   const SizedBox(height: 28),

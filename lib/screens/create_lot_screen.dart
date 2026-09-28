@@ -4,6 +4,7 @@ import '../app_colors.dart';
 import '../data/material_categories.dart';
 import '../services/classifier_service.dart';
 import '../services/location_service.dart';
+import '../models/collector_store.dart';
 import '../widgets/lot_photo_image.dart';
 import 'camera_capture_screen.dart';
 import 'detected_items_review_screen.dart';
@@ -74,6 +75,16 @@ class _CreateLotScreenState extends State<CreateLotScreen> {
       _latitude = position?.latitude;
       _longitude = position?.longitude;
     });
+    if (position != null) {
+      final profile = CollectorStore.getOrCreate();
+      profile.latitude = position.latitude;
+      profile.longitude = position.longitude;
+      await CollectorStore.save(profile);
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(LocationService.lastError ?? 'Location unavailable. You can retry Tag GPS.'),
+      ));
+    }
   }
 
   void _reviewAll() {

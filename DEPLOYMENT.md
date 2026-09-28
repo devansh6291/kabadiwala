@@ -63,10 +63,11 @@ flutter build web --dart-define=API_BASE_URL=https://YOUR-API.onrender.com
 firebase deploy --only hosting
 ```
 
-The API's `CORS_ALLOW_ORIGINS` is set to the Firebase `web.app` origin. If the
-Firebase Hosting site uses a different origin or a custom domain, update that
-environment variable in Render to include the exact browser origin(s),
-comma-separated.
+The API allows the project's default `web.app` and `firebaseapp.com` domains,
+Firebase preview channels, and localhost Flutter web development. If the site
+uses a custom domain, set `CORS_ALLOW_ORIGINS` in Render to include its exact
+origin (scheme and hostname, no trailing slash); separate multiple origins
+with commas.
 
 ## Android and other platforms
 
