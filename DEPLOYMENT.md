@@ -2,36 +2,39 @@
 
 The Flutter web app is configured for Firebase Hosting. The default
 `render.yaml` targets a $0 hobby deployment using Render's free API service
-and a free Aiven MySQL database.
+and a hosted PostgreSQL database. The backend accepts PostgreSQL connection
+URLs through `KABADIWALA_DATABASE_URL`.
 
 ## Free backend setup
 
-1. Create an Aiven MySQL service on its free plan and wait until it is running.
-   From its **Overview / Connection information**, copy the MySQL URI and
-   download its CA certificate. Use Aiven's database name (often `defaultdb`),
-   or create `kabadiwala_db` from the Aiven **Databases** page.
+1. Create a Supabase project on its free plan and wait for its database to
+   finish provisioning. In Supabase, open **Connect** and choose the
+   **Session pooler** connection string. Render services use IPv4, so use the
+   session pooler rather than the direct database connection. The session
+   pooler uses port `5432`; do not use the transaction pooler's port `6543`.
 2. The Git repository must be available to your Render account. If you do not
    own the source repository, fork it to your GitHub account first. In Render,
    create a Blueprint from your fork using `render.yaml`.
-3. Set `KABADIWALA_DATABASE_URL` to the Aiven connection URI. It can use
-   `mysql://` or `mysql+aiomysql://`; include `?ssl=true` if Aiven's URI does
-   not already include an SSL option. Set `KABADIWALA_DB_SSL_CA` to the PEM
-   contents of Aiven's CA certificate so the connection verifies the server.
-   If Render's environment editor removes line breaks, base64-encode the PEM
-   and set the variable to that single-line value instead.
-   The application converts the URL to `mysql+aiomysql` and enables TLS. Keep
-   both values in Render's environment settings; do not put credentials in
-   source code. URL-encode special characters in the username or password.
+3. In Render, open the API service's **Environment** settings and set
+   `KABADIWALA_DATABASE_URL` to the Supabase session-pooler URI. Ensure it has
+   `?sslmode=require` (append it if the URI has no query string; otherwise add
+   `&sslmode=require`). Save the setting and redeploy. The backend converts
+   PostgreSQL URLs to its async driver and enables TLS. Do not put database
+   credentials in source code; URL-encode special characters in the password.
 4. Wait for the API service to deploy, then copy its HTTPS URL. The app creates
-   its tables on startup. Local MySQL records are not copied automatically.
+   its tables on startup. A new Supabase database starts empty; data in the old
+   Aiven database is not copied automatically. Export any data you need before
+   switching providers.
 
 Free-tier limits apply: Render spins its free web service down after 15 minutes
-without traffic (the next request may take about a minute to wake it). Aiven's
-free MySQL service includes 1 GB RAM and 1 GB storage, and may be powered off
-after a period without activity. The Render free configuration disables image
+without traffic (the next request may take about a minute to wake it). Supabase
+Free currently includes 500 MB of database storage and may pause projects with
+low database activity over a 7-day period; paused projects can be restored from
+the Supabase dashboard. The Render free configuration disables image
 classification because the model's memory needs are not a reliable fit for the
 free service. [Render free limits](https://render.com/docs/free) ·
-[Aiven MySQL free tier](https://aiven.io/docs/products/mysql/concepts/mysql-free-tier)
+[Supabase pricing](https://supabase.com/pricing) ·
+[Supabase project pausing](https://supabase.com/docs/guides/platform/free-project-pausing)
 
 ### Demo sign-in with Firebase test numbers
 
