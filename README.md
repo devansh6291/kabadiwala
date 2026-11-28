@@ -153,8 +153,8 @@ This is a hackathon prototype under active development.
 | Form 6 signing flow | Built |
 | API-backed classifier client | Built |
 | Trained AI checkpoints | In progress |
-| Live recycler, pricing, and market-news backends | Planned |
-| QR verification, offline sync, multilingual UI | Planned |
+| Live recycler, pricing, and market-news backends | Built |
+| QR verification, offline sync, multilingual UI | Built |
 
 ## Projected impact
 
