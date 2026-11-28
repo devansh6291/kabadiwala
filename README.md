@@ -174,12 +174,4 @@ These are estimates for the prototype, not measured results.
 - [PostGIS](https://postgis.net/)
 - Similar platforms for case study: Recircle, Attero, EzyRecycler
 
-## Team
-
-**Six of Codes**, Smart India Hackathon 2026
-
-<!-- Add team members here -->
-
-## License
-
 <!-- Add a license, e.g. MIT -->
